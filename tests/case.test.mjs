@@ -1,0 +1,7 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {fresh,restore,discover,unlock,decide} from '../src/case.ts';
+test('locked evidence cannot be read and clues are idempotent',()=>{let p=fresh();assert.equal(discover(p,'ledger'),p);p=discover(p,'message');assert.deepEqual(discover(p,'message').found,['message']);assert.equal(discover(p,'invented'),p);});
+test('wrong password does not unlock; correct key unlocks the ledger',()=>{const p=fresh();assert.equal(unlock(p,'1234').unlocked,false);assert.deepEqual(discover(unlock(p,'1998'),'ledger').found,['ledger']);});
+test('decision requires evidence and produces distinct, permanent endings',()=>{let p=fresh();assert.equal(decide(p,'private').ending,null);p=unlock(p,'1998');for(const id of ['message','inspection','boat','ledger'])p=discover(p,id);assert.equal(decide(p,'unknown').ending,null);assert.equal(decide(p,'private').ending,'safe');const closed=decide(p,'company');assert.equal(closed.ending,'intercepted');assert.equal(decide(closed,'private'),closed);});
+test('saved progress survives reload; corrupt and future saves recover safely',()=>{let p=discover(fresh(),'message');assert.deepEqual(restore(JSON.stringify(p)),p);assert.deepEqual(restore('{broken'),fresh());assert.deepEqual(restore('{"version":2}'),fresh());assert.deepEqual(restore('{"version":1,"found":["fake","message","message"],"pinned":["ledger"],"unlocked":"yes"}'),{...fresh(),found:['message']});});
