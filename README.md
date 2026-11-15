@@ -1,53 +1,78 @@
 # AFTERHOURS
 
-A mystery inside a missing person's laptop. Original project by Lungelo Zikalala.
+A browser mystery game set inside a missing person's laptop. Read her messages, recover files, crack an encrypted archive, prove your deductions - then make one call you cannot take back.
 
-## Run
+Original project by Lungelo Zikalala. All people, places and records are fictional.
 
-Requires Node.js 24 or later. No package installation is required for this first slice.
+## Play it locally
 
-```sh
+Requires Node.js 24 or later. There are no packages to install and no build step.
+
+~~~
+git clone https://github.com/lungelooZi/AFTERHOURS-source.git
+cd AFTERHOURS-source
 node server.mjs
-```
+~~~
 
-Open http://localhost:3000. Run tests with `node --test tests/*.test.mjs`.
+Then open http://localhost:3000. If port 3000 is busy, pick another one:
 
-## First playable slice
+- Windows PowerShell: `$env:PORT=3001; node server.mjs`
+- macOS / Linux: `PORT=3001 node server.mjs`
 
-Read two conversations, recover files, decrypt an archive, pin evidence and choose a rescue channel. Five clues, three named suspects, two endings. The browser saves progress locally. Restart erases only this game's save after confirmation. All people and records are fictional.
+## How to play
 
-## Architecture and scope
+You have Maya's laptop. She left it behind the night she disappeared.
 
-`src/case.ts` contains the typed case model, guarded progression, save validation and ending logic. `src/app.ts` renders the fictional desktop and draggable application window. `server.mjs` serves an explicit allowlist of assets and strips TypeScript with Node's built-in support. Tests cover evidence gating, password checks, save recovery and both endings.
+1. Open **Messages** and **Files** to recover traces.
+2. Unlock the **Archive** - the password is hidden in what you recover.
+3. Pin documents to the **Evidence board** and watch the **Timeline** fill in.
+4. Prove three conclusions in **Deductions** by choosing the right answer *and* the documents that support it.
+5. **Make contact** - choose who receives Maya's location. There are two endings.
 
-This initial vertical slice uses native DOM rendering and a built-in Node server so it runs without a package manager. The agreed production stack remains React/TypeScript, Express, PostgreSQL and Socket.IO. Multiplayer, authentication, server-authoritative clues, cloud saves, voice notes and a case creator are planned, not implemented. Current puzzle answers ship to the client: appropriate for a solo prototype, not competitive play. This compact case is not yet the planned 15-minute experience.
+The **Notebook** keeps your theories and **Hints** gives progressively stronger nudges. Progress saves in your browser; **Restart case** clears it.
 
-## Next milestones
+## Features (v0.2)
 
-1. Expand the story into a timed 15-minute investigation with deductions and branching conversations.
+- Nine desktop apps in a draggable window interface
+- Evidence gating: locked documents cannot be read before they are unlocked
+- Deductions checked against both the answer and the supporting evidence
+- A timeline that only reveals events once their source document is found
+- Validated local saves: corrupted or tampered save data recovers safely
+- Game rules enforced in pure, tested logic - not only in the interface
+
+## How it is built
+
+- `src/case.ts` - evidence, progression, save validation and endings (pure logic)
+- `src/investigation.ts` - deductions, timeline, hints and notebook rules (pure logic)
+- `src/app.ts`, `src/journal-ui.ts` - the desktop interface, written with native DOM APIs
+- `server.mjs` - a small Node HTTP server that serves an explicit allowlist of files and strips TypeScript types with Node's built-in support, so the project needs no build step
+- `tests/` - Node's built-in test runner; GitHub Actions runs the tests on every push
+
+Design choices: the prototype has zero dependencies so it runs anywhere Node does, and the game rules are kept separate from the interface so they can be tested directly and later moved to a server.
+
+## Tests
+
+~~~
+node --test tests/*.test.mjs
+~~~
+
+8 tests cover evidence gating, the archive password, deductions, the rescue decision and save recovery.
+
+## Known limitations
+
+- Single-player prototype; progress is saved only in the browser.
+- Puzzle answers ship to the browser - fine for solo play, not for competitive play.
+- The case takes a few minutes; the target is a 15-minute investigation.
+- No automated browser (interface) tests yet.
+
+## Roadmap
+
+1. Expand the story into a timed 15-minute investigation with branching conversations.
 2. Move the interface to React components and add browser interaction tests.
 3. Add Express/PostgreSQL persistence and two-player Socket.IO rooms with private clues.
-4. Add authoring tools, accessibility review and deployment.
+4. Add a case editor, an accessibility review and deployment.
 
-## GitHub
+## Changelog
 
-## Version 0.2 investigation upgrade
-
-Four new desktop apps are available: Deductions, Timeline, Notebook and Hints.
-Verify three conclusions using the correct answers and their supporting recovered
-documents before making contact. Timeline events appear when their source clues
-are found. Notes (up to 4,000 characters), deductions and revealed hints save on
-this device, alongside the original case progress. Restart clears both saves.
-
-`src/investigation.ts` contains the pure deduction and journal recovery rules;
-`src/journal-ui.ts` renders the new tools. GitHub Actions runs tests on Node 24
-for pushes and pull requests. No dependencies need to be installed.
-
-Validation: seven rule and save-recovery tests pass. All served assets passed
-HTTP smoke checks, and all browser modules passed JavaScript syntax checks.
-Full browser interaction and visual testing remain pending.
-
-This remains a solo prototype with local saves and client-visible puzzle answers.
-Accounts, multiplayer and cloud saves are not implemented.
-
-The source is initialized locally with Git. A GitHub remote has not yet been connected. Do not commit credentials; `.env` is ignored.
+- **v0.2** - Deductions, Timeline, Notebook and Hints; the rescue decisionnow requires verified deductions; tests run in GitHub Actions.
+- **v0.1** - First playable slice: messages, files, encrypted archive, evidence board and two endings.
