@@ -19,8 +19,8 @@ export function discover(p: Progress, id: string): Progress {
  return {...p,found:[...new Set([...p.found,id])]};
 }
 export function unlock(p: Progress, password: string): Progress { return password.trim()==='1998' ? {...p,unlocked:true} : p; }
-export function decide(p: Progress, channel: string): Progress {
- if(p.ending || !['message','inspection','boat','ledger'].every(id=>p.found.includes(id))) return p;
+export function decide(p: Progress, channel: string, deductionsVerified: boolean): Progress {
+ if(p.ending || !deductionsVerified || !['message','inspection','boat','ledger'].every(id=>p.found.includes(id))) return p;
  if(!['private','company'].includes(channel)) return p;
  return {...p,ending:channel==='private'?'safe':'intercepted'};
 }
