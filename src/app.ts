@@ -1,10 +1,14 @@
+import {freshJournal,restoreJournal,ready} from '/investigation.js';
+import {renderJournal} from '/journal-ui.js';
 import {evidence,fresh,restore,discover,unlock,decide} from '/case.js';
 let state = fresh();
 let storageOK=true;
 try{state=restore(localStorage.getItem('afterhours.v1'));}catch{storageOK=false;}
+let journal=freshJournal();
+try{journal=restoreJournal(localStorage.getItem('afterhours.journal.v1'),state.found);}catch{storageOK=false;}
 const host=document.querySelector('#windows')!;
 let layer=5;
-function save(){try{localStorage.setItem('afterhours.v1',JSON.stringify(state));}catch{storageOK=false;}document.querySelector('#status')!.textContent=`${state.found.length} / 5 TRACES RECOVERED · ${state.ending?'CASE CLOSED':'INVESTIGATION ACTIVE'}${storageOK?'':' · SAVE UNAVAILABLE'}`;}
+function save(){try{localStorage.setItem("afterhours.v1",JSON.stringify(state));localStorage.setItem("afterhours.journal.v1",JSON.stringify(journal));}catch{storageOK=false;}document.querySelector("#status")!.textContent=`${state.found.length} / 5 TRACES | ${journal.solved.length} / 3 DEDUCTIONS | ${state.ending?"CASE CLOSED":"INVESTIGATION ACTIVE"}${storageOK?"":" | SAVE UNAVAILABLE"}`;}
 function open(app: string){
  document.querySelector('.window')?.remove();
  const win=document.createElement('section');win.className='window';win.setAttribute('aria-label',app);win.style.zIndex=String(++layer);
@@ -14,6 +18,7 @@ function open(app: string){
  function button(label: string, action:()=>void){const b=document.createElement('button');b.textContent=label;b.onclick=action;body.append(b);return b;}
  function text(value: string,tag='p'){const p=document.createElement(tag);p.textContent=value;body.append(p);return p;}
  function trace(id: string){const e=evidence.find(e=>e.id===id)!;state=discover(state,id);save();const box=document.createElement('article');box.className='trace';const h=document.createElement('h3');h.textContent=e.title;box.append(h);const p=document.createElement('p');p.textContent=e.text;box.append(p);body.append(box);button(state.pinned.includes(id)?'Unpin evidence':'Pin to evidence board',()=>{state={...state,pinned:state.pinned.includes(id)?state.pinned.filter(x=>x!==id):[...state.pinned,id]};save();open(app);});}
+ renderJournal(app,body,state,journal,(next,refresh)=>{journal=next;save();if(refresh)open(app);});
  if(app==='messages'){text('Someone was here after midnight.','h2');trace('message');trace('boat');}
  if(app==='files'){text('Recovered from the desktop','h2');trace('draft');trace('inspection');}
  if(app==='archive'){
@@ -24,7 +29,7 @@ function open(app: string){
  if(app==='resolve'){
   text('The missing hour','h2');
   if(state.ending){text(state.ending==='safe'?'SIGNAL RECEIVED / MAYA IS SAFE':'SIGNAL INTERCEPTED','h3').className='ending';text(state.ending==='safe'?'You sent the service-tunnel location directly to Nia. Her boat reached Pier 4 before the tide rose. Maya escaped with the ledger. Daniel’s reset of Eli’s credentials is the next lead.':'The company line forwarded your location to Daniel. By the time Nia reached the tunnel, Maya was gone. The copied ledger survives, but the rescue failed.');text('This is the end of the first case prototype. Restart to explore the other channel.');}
-  else if(!['message','inspection','boat','ledger'].every(id=>state.found.includes(id))){text('You need the last message, the lighthouse inspection, Nia’s channel and the decrypted ledger before you can make this call.').className='notice';}
+  else if(!ready(state.found,journal)){text("Recover the key documents and verify all three deductions in Deductions before making contact.").className="notice";button("Open deductions",()=>open("deductions"));}
   else {text('Maya is in the North lighthouse service tunnel. Who gets her location? This closes the case.');button('Send privately to Nia',()=>{state=decide(state,'private');save();open(app);});button('Call the company emergency line',()=>{state=decide(state,'company');save();open(app);});}
  }
  let dx=0,dy=0;bar.onpointerdown=e=>{if((e.target as HTMLElement).closest('button'))return;dx=e.clientX-win.offsetLeft;dy=e.clientY-win.offsetTop;bar.setPointerCapture(e.pointerId);};bar.onpointermove=e=>{if(!bar.hasPointerCapture(e.pointerId))return;win.style.left=Math.max(0,Math.min(innerWidth-win.offsetWidth,e.clientX-dx))+'px';win.style.top=Math.max(0,Math.min(innerHeight-48,e.clientY-dy))+'px';};bar.onpointerup=e=>{if(bar.hasPointerCapture(e.pointerId))bar.releasePointerCapture(e.pointerId);};
@@ -32,5 +37,6 @@ function open(app: string){
  win.onkeydown=e=>{if(e.key==='Escape')win.remove();};
 }
 document.querySelectorAll<HTMLButtonElement>('[data-app]').forEach(b=>b.onclick=()=>open(b.dataset.app!));
-document.querySelector<HTMLButtonElement>('#reset')!.onclick=()=>{if(confirm('Erase this case’s progress and start again?')){state=fresh();save();document.querySelector('.window')?.remove();}};
+document.querySelector<HTMLButtonElement>('#reset')!.onclick=()=>{if(confirm('Erase this case’s progress and start again?')){state=fresh();journal=freshJournal();save();document.querySelector('.window')?.remove();}};
 save();
+

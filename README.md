@@ -31,4 +31,23 @@ This initial vertical slice uses native DOM rendering and a built-in Node server
 
 ## GitHub
 
+## Version 0.2 investigation upgrade
+
+Four new desktop apps are available: Deductions, Timeline, Notebook and Hints.
+Verify three conclusions using the correct answers and their supporting recovered
+documents before making contact. Timeline events appear when their source clues
+are found. Notes (up to 4,000 characters), deductions and revealed hints save on
+this device, alongside the original case progress. Restart clears both saves.
+
+`src/investigation.ts` contains the pure deduction and journal recovery rules;
+`src/journal-ui.ts` renders the new tools. GitHub Actions runs tests on Node 24
+for pushes and pull requests. No dependencies need to be installed.
+
+Validation: seven rule and save-recovery tests pass. All served assets passed
+HTTP smoke checks, and all browser modules passed JavaScript syntax checks.
+Full browser interaction and visual testing remain pending.
+
+This remains a solo prototype with local saves and client-visible puzzle answers.
+Accounts, multiplayer and cloud saves are not implemented.
+
 The source is initialized locally with Git. A GitHub remote has not yet been connected. Do not commit credentials; `.env` is ignored.
