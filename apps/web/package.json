@@ -1,6 +1,6 @@
 {
   "name": "@afterhours/web",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "The AFTERHOURS player client: Case 001, The Missing Hour.",

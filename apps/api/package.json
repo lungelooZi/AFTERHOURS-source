@@ -1,6 +1,6 @@
 {
   "name": "@afterhours/api",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "AFTERHOURS platform API: identity, sessions, roles and (next) rooms, case nights and the creator API.",
@@ -16,7 +16,8 @@
     "@fastify/cookie": "^11.0.0",
     "fastify": "^5.6.0",
     "pg": "^8.16.0",
-    "zod": "^4.1.0"
+    "zod": "^4.1.0",
+    "@afterhours/game-engine": "*"
   },
   "devDependencies": {
     "@types/pg": "^8.15.0",

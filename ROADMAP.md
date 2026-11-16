@@ -22,12 +22,14 @@ creating mysteries. Each phase ships something usable and keeps the game working
 - [x] Password reset by email: single-use, expiring, hashed tokens; development emails print to the terminal (#3)
 - [x] See and sign out individual devices from the Account window (#4)
 
-## Phase 3: Cases on the server (v0.5)
+## Phase 3: Cases on the server (v0.5) 🚧
 
-- Case progress saved to the account instead of `localStorage` (#5)
-- The API validates every action with `game-engine`, so answers stop shipping to the browser
-- Case catalogue: Case 001 becomes the first entry of a `cases` table
-- Player client moves to React/Next.js with Playwright tests for the core flows
+- [x] Case progress saved on the server, per account or per guest; guest progress moves into the account on sign-up (#5)
+- [x] The API applies every action with `game-engine` and returns a redacted view, so answers no longer ship to the browser (#5)
+- [x] Run without a database (`npm run dev:memory`) for quick play and end-to-end tests
+- [ ] Playwright tests for the core flows, in CI
+- [ ] Case catalogue: more than one case, listed from the server
+- [ ] Player client moves to React/Next.js
 
 ## Phase 4: Play together (v0.6)
 

@@ -11,7 +11,12 @@ if (!email || !(ROLES as readonly string[]).includes(role)) {
   console.error(`Usage: npm run promote -- <email> [${ROLES.join('|')}]`);
   process.exit(1);
 }
-const pool = createPool(loadConfig().databaseUrl);
+const { databaseUrl } = loadConfig();
+if (!databaseUrl) {
+  console.error("DATABASE_URL is required (roles are stored in Postgres).");
+  process.exit(1);
+}
+const pool = createPool(databaseUrl);
 try {
   const result = await pool.query('UPDATE users SET role = $2, updated_at = now() WHERE email = $1 RETURNING id', [email, role as Role]);
   if (!result.rowCount) {

@@ -1,33 +1,109 @@
-import {evidence} from '/case.js';
-import {deductions,timeline,deduce,hints} from '/investigation.js';
+// Deductions, Timeline, Notebook and Hints. Renders the server's PlayerView; returns
+// true if it drew the app. Answers arrive only once a deduction is solved.
 
-// UI stays separate from the pure investigation rules used by tests.
-export function renderJournal(app,body,state,journal,update){
- const text=(value,tag='p')=>{const node=document.createElement(tag);node.textContent=value;body.append(node);return node;};
- if(app==='deductions'){
-  text('Build your case','h2');text('Choose a conclusion and select every recovered document needed to support it.');
-  for(const d of deductions){
-   const form=document.createElement('form');form.className='deduction';body.append(form);
-   const heading=document.createElement('h3');heading.textContent=d.question;form.append(heading);
-   if(journal.solved.includes(d.id)){const p=document.createElement('p');p.className='verified';p.textContent='VERIFIED · '+d.answer+' — '+d.explanation;form.append(p);continue;}
-   const label=document.createElement('label');label.textContent='Conclusion';const select=document.createElement('select');select.required=true;
-   for(const answer of ['',...d.options]){const option=document.createElement('option');option.value=answer;option.textContent=answer||'Choose a conclusion';select.append(option);}label.append(select);form.append(label);
-   const field=document.createElement('fieldset');const legend=document.createElement('legend');legend.textContent='Supporting documents';field.append(legend);form.append(field);
-   for(const clue of evidence.filter(e=>state.found.includes(e.id))){const label=document.createElement('label');label.className='evidence-choice';const input=document.createElement('input');input.type='checkbox';input.value=clue.id;label.append(input,document.createTextNode(clue.title));field.append(label);}
-   if(!state.found.length){const p=document.createElement('p');p.textContent='Recover documents in Messages, Files and Archive first.';field.append(p);}
-   const submit=document.createElement('button');submit.textContent='Verify deduction';form.append(submit);const feedback=document.createElement('p');feedback.setAttribute('role','status');form.append(feedback);
-   form.onsubmit=e=>{e.preventDefault();const selected=Array.from(field.querySelectorAll('input:checked')).map(input=>input.value);const next=deduce(journal,state.found,d.id,select.value,selected);if(next===journal)feedback.textContent='Not established yet. Reconsider your conclusion and select all supporting documents.';else update(next,true);};
+function el(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+const allFound = (view) => [...view.apps.messages, ...view.apps.files, ...view.apps.archive];
+
+let notesTimer = 0;
+
+export function renderJournal(app, body, view, act, rerender) {
+  const text = (value, tag = 'p', className) => body.appendChild(el(tag, value, className));
+
+  if (app === 'deductions') {
+    text('Build your case', 'h2');
+    text('Choose a conclusion and select every recovered document needed to support it.');
+    const found = allFound(view);
+    for (const d of view.deductions) {
+      const form = body.appendChild(el('form', '', 'deduction'));
+      form.append(el('h3', d.question));
+      if (d.solved) {
+        form.append(el('p', `VERIFIED · ${d.answer} — ${d.explanation}`, 'verified'));
+        continue;
+      }
+      const label = form.appendChild(el('label', 'Conclusion'));
+      const select = label.appendChild(el('select'));
+      select.required = true;
+      for (const option of ['', ...d.options]) {
+        const o = select.appendChild(el('option', option || 'Choose a conclusion'));
+        o.value = option;
+      }
+      const field = form.appendChild(el('fieldset'));
+      field.append(el('legend', 'Supporting documents'));
+      for (const clue of found) {
+        const choice = field.appendChild(el('label', '', 'evidence-choice'));
+        const input = choice.appendChild(el('input'));
+        input.type = 'checkbox';
+        input.value = clue.id;
+        choice.append(document.createTextNode(clue.title));
+      }
+      if (!found.length) field.append(el('p', 'Recover documents in Messages, Files and Archive first.'));
+      const submit = form.appendChild(el('button', 'Verify deduction'));
+      const feedback = form.appendChild(el('p'));
+      feedback.setAttribute('role', 'status');
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        submit.disabled = true;
+        const supporting = [...field.querySelectorAll('input:checked')].map((i) => i.value);
+        const message = await act({ type: 'deduce', deductionId: d.id, answer: select.value, supporting });
+        submit.disabled = false;
+        if (message) feedback.textContent = message;
+        else rerender();
+      };
+    }
+    return true;
   }
- }
- if(app==='timeline'){
-  text('The missing hour, reconstructed','h2');text('Only events supported by recovered documents appear. Times cross midnight.');
-  for(const event of timeline){const known=event.requires.every(id=>state.found.includes(id));text(known?event.day+' / '+event.time:'Unrecovered event','h3');text(known?event.text:'Read more records to reconstruct this part of the night.');}
- }
- if(app==='notes'){
-  text('Investigator’s notebook','h2');const label=document.createElement('label');label.textContent='Your theories and observations (up to 4,000 characters)';const input=document.createElement('textarea');input.maxLength=4000;input.rows=10;input.value=journal.notes;label.append(input);body.append(label);text('Notes save on this device as you type. Check the desktop status for save availability.');input.oninput=()=>{journal={...journal,notes:input.value};update(journal,false);};
- }
- if(app==='hints'){
-  text('Need a lead?','h2');text('Optional hints become more specific. Revealed hints stay available.');for(const hint of hints.slice(0,journal.hints))text(hint);
-  if(journal.hints<hints.length){const button=document.createElement('button');button.textContent='Reveal next hint';button.onclick=()=>update({...journal,hints:journal.hints+1},true);body.append(button);}else text('All hints revealed. Compare your documents with the deductions.');
- }
+
+  if (app === 'timeline') {
+    text('The missing hour, reconstructed', 'h2');
+    text('Only events supported by recovered documents appear. Times cross midnight.');
+    for (const event of view.timeline) {
+      text(event.known ? `${event.day} / ${event.time}` : 'Unrecovered event', 'h3');
+      text(event.known ? event.text : 'Read more records to reconstruct this part of the night.');
+    }
+    return true;
+  }
+
+  if (app === 'notes') {
+    text('Investigator’s notebook', 'h2');
+    const label = body.appendChild(el('label', 'Your theories and observations (up to 4,000 characters)'));
+    const input = label.appendChild(el('textarea'));
+    input.maxLength = 4000;
+    input.rows = 10;
+    input.value = view.notes;
+    const saved = text('Notes save automatically as you type.', 'p', 'muted');
+    saved.setAttribute('role', 'status');
+    input.oninput = () => {
+      clearTimeout(notesTimer);
+      saved.textContent = 'Saving…';
+      // Save once typing pauses, not on every keystroke.
+      notesTimer = setTimeout(async () => {
+        const message = await act({ type: 'notes', text: input.value });
+        saved.textContent = message || 'Saved.';
+      }, 700);
+    };
+    return true;
+  }
+
+  if (app === 'hints') {
+    text('Need a lead?', 'h2');
+    text('Optional hints become more specific. Revealed hints stay available.');
+    for (const hint of view.hints.revealed) text(hint);
+    if (view.hints.remaining > 0) {
+      const b = body.appendChild(el('button', 'Reveal next hint'));
+      b.onclick = async () => {
+        b.disabled = true;
+        await act({ type: 'hint' });
+        rerender();
+      };
+    } else text('All hints revealed. Compare your documents with the deductions.');
+    return true;
+  }
+
+  return false;
 }

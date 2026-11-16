@@ -149,7 +149,7 @@ export function renderAccount(app, body, rerender) {
   if (currentUser) {
     text('Your account', 'h2');
     text(`Signed in as ${currentUser.displayName} (${currentUser.email}).`);
-    text('Case progress is still saved on this device. Saving it to your account is coming next.', 'p').className = 'muted';
+    text('Your case progress is saved to your account, so you can continue on any device.', 'p').className = 'muted';
     const status = statusLine(body);
     const out = el('button', 'Sign out');
     const everywhere = el('button', 'Sign out on every device');
@@ -168,7 +168,7 @@ export function renderAccount(app, body, rerender) {
     text(flash, 'p').className = 'verified';
     flash = '';
   }
-  text('Accounts are optional. You can keep playing as a guest.', 'p').className = 'muted';
+  text('Accounts are optional. As a guest, progress is saved for this browser; sign in to keep it on any device.', 'p').className = 'muted';
 
   const form = el('form', '', { class: 'account-form', novalidate: '' });
   body.append(form);

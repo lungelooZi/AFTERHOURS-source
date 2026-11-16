@@ -21,8 +21,12 @@ describe('loadConfig', () => {
   });
 
   it('fails fast with a readable message', () => {
-    expect(() => loadConfig({ PORT: 'abc' })).toThrow(/Invalid configuration/);
-    expect(() => loadConfig({ PORT: 'abc' })).toThrow(/- PORT:/);
-    expect(() => loadConfig({ PORT: 'abc' })).toThrow(/- DATABASE_URL:/);
+    expect(() => loadConfig({ ...base, PORT: 'abc' })).toThrow(/Invalid configuration[\s\S]*- PORT:/);
+    expect(() => loadConfig({})).toThrow(/- DATABASE_URL: required when STORE=postgres/);
+  });
+
+  it('STORE=memory needs no database', () => {
+    expect(loadConfig({ STORE: 'memory' })).toMatchObject({ store: 'memory', databaseUrl: undefined });
+    expect(loadConfig(base).store).toBe('postgres');
   });
 });
