@@ -1,11 +1,13 @@
-import { createAccountClient } from '/account.js';
+import { createAccountClient, resetTokenFromHash } from '/account.js';
 
 // Account window and header identity. Rendering only: requests and error wording
 // live in account.ts, which is unit-tested.
 
 export const account = createAccountClient();
 let currentUser = null;
-let mode = 'signin';
+let mode = 'signin'; // signin | signup | forgot | reset
+let resetToken = null;
+let flash = '';
 
 export function signedInUser() {
   return currentUser;
@@ -14,6 +16,7 @@ export function signedInUser() {
 /** Fetches the session once and updates the header ("Guest" or "Signed in as ..."). */
 export async function refreshIdentity() {
   currentUser = await account.me();
+  if (currentUser) mode = 'signin'; // the next time they're signed out, offer sign-in
   const label = document.querySelector('#identity');
   if (label) label.textContent = currentUser ? `SIGNED IN AS ${currentUser.displayName.toUpperCase()}` : 'GUEST';
 }
@@ -49,6 +52,66 @@ async function submitWith(button, status, action, onSuccess) {
   else status.textContent = result.message;
 }
 
+/**
+ * If the page was opened from a reset email, remember the token, remove it from the
+ * address bar and history, and open the Account window on the new-password form.
+ */
+export function handleResetLink(openAccount) {
+  const check = () => {
+    const token = resetTokenFromHash(location.hash);
+    if (!token) return;
+    resetToken = token;
+    mode = 'reset';
+    history.replaceState(null, '', location.pathname + location.search);
+    openAccount();
+  };
+  check();
+  // Opening the link in a tab where the game is already loaded only changes the hash.
+  window.addEventListener('hashchange', check);
+}
+
+function renderForgot(body, rerender) {
+  body.append(el('h2', 'Reset your password'));
+  body.append(el('p', "Enter your account's email. If it exists, we'll send a link to choose a new password.", { class: 'muted' }));
+  const form = el('form', '', { class: 'account-form', novalidate: '' });
+  body.append(form);
+  const email = field(form, 'Email', { name: 'email', type: 'email', autocomplete: 'email', required: '' });
+  const submit = el('button', 'Send reset link', { type: 'submit' });
+  form.append(submit);
+  const status = statusLine(form);
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    submitWith(submit, status, () => account.requestPasswordReset(email.value), (value) => {
+      status.className = 'verified';
+      status.textContent = value.message;
+    });
+  };
+  const back = el('button', 'Back to sign in', { type: 'button', class: 'link' });
+  back.onclick = () => { mode = 'signin'; rerender(); };
+  body.append(back);
+}
+
+function renderReset(body, rerender) {
+  body.append(el('h2', 'Choose a new password'));
+  body.append(el('p', 'This signs you out on every device. Use at least 12 characters.', { class: 'muted' }));
+  const form = el('form', '', { class: 'account-form', novalidate: '' });
+  body.append(form);
+  const password = field(form, 'New password', { name: 'password', type: 'password', autocomplete: 'new-password', required: '', minlength: '12' });
+  const submit = el('button', 'Save new password', { type: 'submit' });
+  form.append(submit);
+  const status = statusLine(form);
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    submitWith(submit, status, () => account.resetPassword(resetToken, password.value), async () => {
+      resetToken = null;
+      mode = 'signin';
+      flash = 'Password changed. Sign in with your new password.';
+      await refreshIdentity();
+      rerender();
+    });
+  };
+}
+
 export function renderAccount(app, body, rerender) {
   if (app !== 'account') return;
   const text = (value, tag = 'p') => body.appendChild(el(tag, value));
@@ -66,7 +129,14 @@ export function renderAccount(app, body, rerender) {
     return;
   }
 
+  if (mode === 'forgot') return renderForgot(body, rerender);
+  if (mode === 'reset' && resetToken) return renderReset(body, rerender);
+
   text(mode === 'signin' ? 'Sign in' : 'Create an account', 'h2');
+  if (flash) {
+    text(flash, 'p').className = 'verified';
+    flash = '';
+  }
   text('Accounts are optional. You can keep playing as a guest.', 'p').className = 'muted';
 
   const form = el('form', '', { class: 'account-form', novalidate: '' });
@@ -96,4 +166,9 @@ export function renderAccount(app, body, rerender) {
   const swap = el('button', mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in', { type: 'button', class: 'link' });
   swap.onclick = () => { mode = mode === 'signin' ? 'signup' : 'signin'; rerender(); };
   body.append(swap);
+  if (mode === 'signin') {
+    const forgot = el('button', 'Forgot password?', { type: 'button', class: 'link' });
+    forgot.onclick = () => { mode = 'forgot'; rerender(); };
+    body.append(el('br'), forgot);
+  }
 }

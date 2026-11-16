@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createAccountClient, messageFor } from '../src/account.ts';
+import { createAccountClient, messageFor, resetTokenFromHash } from '../src/account.ts';
 
 /** A fake fetch that answers from a table and records each call. */
 function fakeFetch(table) {
@@ -65,8 +65,27 @@ test('a down API or a non-JSON error page is reported as api_unavailable', async
 });
 
 test('messageFor covers every code the API returns', () => {
-  for (const code of ['invalid_credentials', 'email_taken', 'rate_limited', 'validation_failed', 'unauthenticated', 'api_unavailable']) {
+  for (const code of ['invalid_reset_token', 'invalid_credentials', 'email_taken', 'rate_limited', 'validation_failed', 'unauthenticated', 'api_unavailable']) {
     assert.notEqual(messageFor(code), messageFor('something_new'), code);
   }
   assert.equal(messageFor('rate_limited', { retryAfterSeconds: 30 }), 'Too many attempts. Try again in 1 minute.');
+});
+
+test('password reset: request and confirm call the right endpoints', async () => {
+  const f = fakeFetch({
+    'POST /api/auth/password-reset': [202, { message: 'If an account exists for that email, a reset link is on its way.' }],
+    'POST /api/auth/password-reset/confirm': [204],
+  });
+  const client = createAccountClient(f);
+  assert.equal((await client.requestPasswordReset('maya@example.com')).ok, true);
+  assert.deepEqual(await client.resetPassword('tok'.repeat(10), 'a new passphrase!'), { ok: true, value: null });
+  assert.deepEqual(f.calls.map((c) => c.body), [{ email: 'maya@example.com' }, { token: 'tok'.repeat(10), password: 'a new passphrase!' }]);
+});
+
+test('reset tokens are read only from a well-formed #reset= fragment', () => {
+  const token = 'Abc_def-123456789012345678901234567890123';
+  assert.equal(resetTokenFromHash(`#reset=${token}`), token);
+  for (const hash of ['', '#', '#reset=', '#reset=short', `#reset=${token}&x=1`, `#other=${token}`, `#reset=${token}<script>`]) {
+    assert.equal(resetTokenFromHash(hash), null, hash);
+  }
 });

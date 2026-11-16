@@ -1,6 +1,6 @@
 import {freshJournal,restoreJournal,ready} from '/investigation.js';
 import {renderJournal} from '/journal-ui.js';
-import {renderAccount,refreshIdentity} from '/account-ui.js';
+import {renderAccount,refreshIdentity,handleResetLink} from '/account-ui.js';
 import {evidence,fresh,restore,discover,unlock,decide} from '/case.js';
 let state = fresh();
 let storageOK=true;
@@ -42,3 +42,4 @@ document.querySelectorAll<HTMLButtonElement>('[data-app]').forEach(b=>b.onclick=
 document.querySelector<HTMLButtonElement>('#reset')!.onclick=()=>{if(confirm('Erase this case’s progress and start again?')){state=fresh();journal=freshJournal();save();document.querySelector('.window')?.remove();}};
 save();
 refreshIdentity();
+handleResetLink(()=>open('account'));
