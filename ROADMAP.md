@@ -27,7 +27,7 @@ creating mysteries. Each phase ships something usable and keeps the game working
 - [x] Case progress saved on the server, per account or per guest; guest progress moves into the account on sign-up (#5)
 - [x] The API applies every action with `game-engine` and returns a redacted view, so answers no longer ship to the browser (#5)
 - [x] Run without a database (`npm run dev:memory`) for quick play and end-to-end tests
-- [ ] Playwright tests for the core flows, in CI
+- [x] Playwright tests for the core flows, in CI
 - [ ] Case catalogue: more than one case, listed from the server
 - [ ] Player client moves to React/Next.js
 

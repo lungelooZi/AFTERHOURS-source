@@ -73,11 +73,15 @@ Make yourself an admin: `npm run promote -w @afterhours/api -- you@example.com a
 npm run typecheck          # strict TypeScript across api and game-engine
 npm test                   # game-engine, web server + clients + spoiler check (node:test), API (Vitest)
 npm run test:integration   # API against real Postgres
+npm run test:e2e           # Playwright: plays Case 001 in a real browser (no database needed)
 ~~~
+
+The first time you run the end-to-end tests, install the browser with
+`npx playwright install chromium`.
 
 Integration tests need `DATABASE_URL`, for example
 `postgres://afterhours:afterhours@localhost:5432/afterhours_test` (created by Docker Compose).
-CI runs all three on every push and pull request.
+CI runs all four on every push and pull request.
 
 ## Engineering highlights
 
@@ -119,7 +123,6 @@ Next up: Phase 4, playing together: multiplayer case rooms over WebSockets.
 
 - Login and guess rate limits are per process; multiple API instances need Redis (ADR-0005).
 - Guest runs are never cleaned up yet (needs the Phase 4 job queue).
-- No browser (Playwright) tests in CI yet.
 
 ## Contributing
 
@@ -127,6 +130,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under the [MIT License](LICENSE
 
 ## Changelog
 
+- **v0.5.1** - End-to-end tests: Playwright plays the whole case, carries guest progress
+  into an account, signs one device out from another, and checks no answers are
+  downloaded. Runs in CI against the API in memory mode.
 - **v0.5** - Cases run on the server (#5): the browser no longer receives any answers.
   Progress is saved per account or per guest, moves into your account when you sign up,
   and is protected by optimistic locking; wrong archive passwords are rate limited.

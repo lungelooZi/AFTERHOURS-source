@@ -9,7 +9,7 @@ import type { CaseService } from './cases/service.ts';
 import { AppError } from './errors.ts';
 import { healthRoutes } from './health/routes.ts';
 
-export const VERSION = '0.5.0';
+export const VERSION = '0.5.1';
 
 export type AppDependencies = {
   auth: AuthService;

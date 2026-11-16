@@ -9,6 +9,7 @@
    npm run typecheck
    npm test
    npm run test:integration   # needs Postgres, see README
+   npm run test:e2e           # needs `npx playwright install chromium` once
    ~~~
 4. Open a pull request. CI must pass. Describe the behaviour change and how it was tested.
 
