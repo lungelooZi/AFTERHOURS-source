@@ -1,6 +1,6 @@
 {
   "name": "@afterhours/game-engine",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "description": "Pure, server-side rules for AFTERHOURS cases: evidence, deductions, endings, and the redacted view each player is allowed to see.",

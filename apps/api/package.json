@@ -1,6 +1,6 @@
 {
   "name": "@afterhours/api",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "description": "AFTERHOURS platform API: identity, sessions, roles and (next) rooms, case nights and the creator API.",

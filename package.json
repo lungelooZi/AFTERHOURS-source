@@ -1,6 +1,6 @@
 {
   "name": "afterhours",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "description": "AFTERHOURS: a multiplayer mystery-game platform. Investigate cases, run live case nights, and build your own mysteries.",
@@ -17,12 +17,14 @@
     "db:migrate": "npm run migrate -w @afterhours/api",
     "typecheck": "tsc -p tsconfig.json",
     "test": "npm run test --workspaces --if-present",
-    "test:integration": "npm run test:integration -w @afterhours/api"
+    "test:integration": "npm run test:integration -w @afterhours/api",
+    "test:e2e": "playwright test"
   },
   "engines": {
     "node": ">=22.18"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0"
   }
