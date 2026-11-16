@@ -11,8 +11,7 @@ const routes = {
   '/journal-ui.js': ['src/journal-ui.ts', 'text/javascript'],
   '/account.js': ['src/account.ts', 'text/javascript'],
   '/account-ui.js': ['src/account-ui.ts', 'text/javascript'],
-  '/case.js': ['../../packages/game-engine/src/case.ts', 'text/javascript'],
-  '/investigation.js': ['../../packages/game-engine/src/investigation.ts', 'text/javascript'],
+  '/case-client.js': ['src/case-client.ts', 'text/javascript'],
 };
 
 // Connection-level headers must not be forwarded by a proxy (RFC 9110 §7.6.1).

@@ -1,6 +1,6 @@
 {
   "name": "afterhours",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "AFTERHOURS: a multiplayer mystery-game platform. Investigate cases, run live case nights, and build your own mysteries.",
@@ -10,6 +10,8 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:memory": "node scripts/dev.mjs --memory",
     "start": "npm run start -w @afterhours/web",
     "dev:api": "npm run dev -w @afterhours/api",
     "db:migrate": "npm run migrate -w @afterhours/api",
