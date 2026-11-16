@@ -13,6 +13,8 @@ const schema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 90).default(24 * 7),
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
   LOGIN_WINDOW_MINUTES: z.coerce.number().int().min(1).default(15),
+  APP_URL: z.string().url().default('http://localhost:3000'),
+  PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(24 * 60).default(30),
   // false | true | 'loopback' | comma-separated IPs/CIDRs of proxies to trust.
   TRUST_PROXY: z
     .string()
@@ -27,6 +29,8 @@ export type Config = {
   databaseUrl: string;
   sessionTtlMs: number;
   login: { maxAttempts: number; windowMs: number };
+  appUrl: string;
+  passwordResetTtlMs: number;
   /** Which proxies may set X-Forwarded-For. See docs/decisions/0007. */
   trustProxy: boolean | string;
 };
@@ -45,6 +49,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: c.DATABASE_URL,
     sessionTtlMs: c.SESSION_TTL_HOURS * 60 * 60 * 1000,
     login: { maxAttempts: c.LOGIN_MAX_ATTEMPTS, windowMs: c.LOGIN_WINDOW_MINUTES * 60 * 1000 },
+    appUrl: c.APP_URL,
+    passwordResetTtlMs: c.PASSWORD_RESET_TTL_MINUTES * 60 * 1000,
     trustProxy: c.TRUST_PROXY,
   };
 }

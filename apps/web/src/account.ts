@@ -30,6 +30,8 @@ export function messageFor(code: string, details?: unknown): string {
         .map(([field, messages]) => `${FIELD_LABELS[field] ?? field}: ${messages![0]}`);
       return parts.length ? parts.join(' ') : 'Some details are missing or invalid.';
     }
+    case 'invalid_reset_token':
+      return 'This reset link is invalid, already used or expired. Request a new one.';
     case 'unauthenticated':
       return 'Your session has ended. Please sign in again.';
     case 'api_unavailable':
@@ -73,9 +75,18 @@ export function createAccountClient(fetchFn: FetchLike = (url, init) => fetch(ur
       const result = await call<{ user: User }>('POST', '/auth/register', { displayName, email, password });
       return result.ok ? { ok: true, value: result.value.user } : result;
     },
+    /** Always reports success for a valid email, whether or not an account exists. */
+    requestPasswordReset: (email: string) => call<{ message: string }>('POST', '/auth/password-reset', { email }),
+    resetPassword: (token: string, password: string) => call<null>('POST', '/auth/password-reset/confirm', { token, password }),
     signOut: () => call<null>('POST', '/auth/logout'),
     signOutEverywhere: () => call<null>('POST', '/auth/logout-all'),
   };
 }
 
 export type AccountClient = ReturnType<typeof createAccountClient>;
+
+/** Reads a reset token from a link like https://host/#reset=TOKEN. */
+export function resetTokenFromHash(hash: string): string | null {
+  const match = /^#reset=([A-Za-z0-9_-]{20,128})$/.exec(hash);
+  return match?.[1] ?? null;
+}

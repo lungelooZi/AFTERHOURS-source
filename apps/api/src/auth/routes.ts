@@ -85,5 +85,16 @@ export function authRoutes(auth: AuthService, opts: { secureCookies: boolean }) 
     });
 
     app.get('/auth/me', async (req) => ({ user: requireUser(req) }));
+
+    app.post('/auth/password-reset', async (req, reply) => {
+      await auth.requestPasswordReset(req.body, contextOf(req));
+      return reply.code(202).send({ message: 'If an account exists for that email, a reset link is on its way.' });
+    });
+
+    app.post('/auth/password-reset/confirm', async (req, reply) => {
+      await auth.resetPassword(req.body, contextOf(req));
+      clearCookie(reply);
+      return reply.code(204).send();
+    });
   };
 }

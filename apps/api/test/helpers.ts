@@ -4,6 +4,7 @@ import type { ScryptParams } from '../src/auth/password.ts';
 import { SlidingWindowLimiter } from '../src/auth/rate-limiter.ts';
 import { AuthService } from '../src/auth/service.ts';
 import type { AuthStore } from '../src/auth/types.ts';
+import { MemoryMailer } from '../src/mail/mailer.ts';
 
 /** Cheap scrypt parameters so the suite stays fast. Production uses DEFAULT_PARAMS. */
 export const FAST_HASH: ScryptParams = { N: 2 ** 10, r: 8, p: 1, keyLength: 64 };
@@ -27,9 +28,20 @@ export function makeService(opts: { store?: AuthStore; clock?: FakeClock; ttlMs?
   const limiters = {
     account: new SlidingWindowLimiter(max, 15 * 60_000, clock.nowMs),
     ip: new SlidingWindowLimiter(max * 10, 15 * 60_000, clock.nowMs),
+    reset: new SlidingWindowLimiter(3, 60 * 60_000, clock.nowMs),
   };
-  const auth = new AuthService({ store, limiters, sessionTtlMs: opts.ttlMs ?? 60 * 60_000, now: clock.now, hashParams: FAST_HASH });
-  return { auth, store, clock, limiters };
+  const mailer = new MemoryMailer();
+  const auth = new AuthService({
+    store,
+    limiters,
+    sessionTtlMs: opts.ttlMs ?? 60 * 60_000,
+    now: clock.now,
+    hashParams: FAST_HASH,
+    mailer,
+    appUrl: 'http://localhost:3000/',
+    resetTtlMs: 30 * 60_000,
+  });
+  return { auth, store, clock, limiters, mailer };
 }
 
 export async function makeApp(opts: Parameters<typeof makeService>[0] & { dbUp?: boolean; trustProxy?: boolean | string } = {}) {
@@ -45,4 +57,12 @@ export async function makeApp(opts: Parameters<typeof makeService>[0] & { dbUp?:
 }
 
 export const ctx = { ip: '203.0.113.7', userAgent: 'vitest' };
+/** Pulls the reset token out of the most recent email. */
+export function tokenFromEmail(mailer: MemoryMailer): string {
+  const text = mailer.sent.at(-1)?.text ?? '';
+  const match = text.match(/#reset=([\w-]+)/);
+  if (!match?.[1]) throw new Error('no reset link in email');
+  return match[1];
+}
+
 export const alice = { email: 'Alice@Example.com', password: 'correct horse battery', displayName: 'Alice' };

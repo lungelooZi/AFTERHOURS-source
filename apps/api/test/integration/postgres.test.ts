@@ -5,6 +5,7 @@ import { SESSION_COOKIE } from '../../src/auth/routes.ts';
 import { EmailTakenError } from '../../src/auth/types.ts';
 import { migrate } from '../../src/db/migrate.ts';
 import { createPool, ping } from '../../src/db/pool.ts';
+import { hashToken } from '../../src/auth/tokens.ts';
 import { alice, makeApp } from '../helpers.ts';
 
 /**
@@ -20,12 +21,12 @@ describe.skipIf(!url)('Postgres integration', () => {
 
   beforeAll(async () => {
     pool = createPool(url!);
-    await pool.query('DROP TABLE IF EXISTS audit_log, sessions, users, schema_migrations CASCADE');
+    await pool.query('DROP TABLE IF EXISTS password_reset_tokens, audit_log, sessions, users, schema_migrations CASCADE');
     await migrate(pool, () => undefined);
     store = new PostgresAuthStore(pool);
   });
   beforeEach(async () => {
-    await pool.query('TRUNCATE audit_log, sessions, users RESTART IDENTITY CASCADE');
+    await pool.query('TRUNCATE password_reset_tokens, audit_log, sessions, users RESTART IDENTITY CASCADE');
   });
   afterAll(async () => {
     await pool?.end();
@@ -34,14 +35,14 @@ describe.skipIf(!url)('Postgres integration', () => {
   it('migrations are idempotent and recorded', async () => {
     expect(await migrate(pool, () => undefined)).toEqual([]);
     const { rows } = await pool.query('SELECT name FROM schema_migrations');
-    expect(rows.map((r) => r.name)).toContain('0001_identity.sql');
+    expect(rows.map((r) => r.name)).toEqual(expect.arrayContaining(['0001_identity.sql', '0002_password_resets.sql']));
     expect(await ping(pool)).toBe(true);
   });
 
   it('concurrent migration runs do not collide (advisory lock)', async () => {
-    await pool.query('DROP TABLE IF EXISTS audit_log, sessions, users, schema_migrations CASCADE');
+    await pool.query('DROP TABLE IF EXISTS password_reset_tokens, audit_log, sessions, users, schema_migrations CASCADE');
     const results = await Promise.all([migrate(pool, () => undefined), migrate(pool, () => undefined)]);
-    expect(results.flat()).toEqual(['0001_identity.sql']);
+    expect(results.flat()).toEqual(['0001_identity.sql', '0002_password_resets.sql']);
   });
 
   it('enforces case-insensitive unique emails at the database level', async () => {
@@ -97,5 +98,37 @@ describe.skipIf(!url)('Postgres integration', () => {
     const actions = (await store.listAudit(10)).map((e) => e.action);
     expect(actions).toEqual(['session.revoked_all', 'session.created', 'session.created', 'user.registered']);
     await app.close();
+  });
+
+  describe('password reset', () => {
+    const setup = async () => {
+      const user = await store.createUser({ email: 'r@b.co', displayName: 'Reset', passwordHash: 'old', role: 'player' });
+      const expiresAt = new Date(Date.now() + 60_000);
+      await store.createPasswordReset({ tokenHash: hashToken('token-one'), userId: user.id, expiresAt, ip: '203.0.113.7' });
+      await store.createPasswordReset({ tokenHash: hashToken('token-two'), userId: user.id, expiresAt, ip: null });
+      await store.createSession({ tokenHash: 'c'.repeat(64), userId: user.id, expiresAt, ip: null, userAgent: null });
+      return user;
+    };
+
+    it('completes atomically: password, other tokens and sessions', async () => {
+      const user = await setup();
+      expect(await store.completePasswordReset(hashToken('token-one'), 'new-hash', new Date())).toBe(user.id);
+      expect((await store.findUserByEmail('r@b.co'))?.passwordHash).toBe('new-hash');
+      expect(await store.findActiveSession('c'.repeat(64), new Date())).toBeNull();
+      expect(await store.completePasswordReset(hashToken('token-two'), 'other', new Date())).toBeNull();
+    });
+
+    it('two concurrent uses of one token: exactly one succeeds', async () => {
+      await setup();
+      const results = await Promise.all(
+        Array.from({ length: 5 }, (_, i) => store.completePasswordReset(hashToken('token-one'), `hash-${i}`, new Date())),
+      );
+      expect(results.filter(Boolean)).toHaveLength(1);
+    });
+
+    it('expired tokens are rejected', async () => {
+      await setup();
+      expect(await store.completePasswordReset(hashToken('token-one'), 'x', new Date(Date.now() + 120_000))).toBeNull();
+    });
   });
 });

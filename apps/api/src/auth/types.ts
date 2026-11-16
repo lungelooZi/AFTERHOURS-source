@@ -38,7 +38,11 @@ export type AuditAction =
   | 'session.login_failed'
   | 'session.revoked'
   | 'session.revoked_all'
-  | 'user.role_changed';
+  | 'user.role_changed'
+  | 'password.reset_requested'
+  | 'password.reset_completed';
+
+export type NewPasswordReset = { tokenHash: string; userId: string; expiresAt: Date; ip: string | null };
 
 export type NewUser = { email: string; displayName: string; passwordHash: string; role: Role };
 export type NewSession = Omit<Session, 'createdAt' | 'revokedAt'>;
@@ -62,6 +66,14 @@ export interface AuthStore {
   findActiveSession(tokenHash: string, now: Date): Promise<{ session: Session; user: User } | null>;
   revokeSession(tokenHash: string, now: Date): Promise<void>;
   revokeAllSessions(userId: string, now: Date): Promise<number>;
+
+  createPasswordReset(reset: NewPasswordReset): Promise<void>;
+  /**
+   * In one atomic step: marks the token used (only if unused and unexpired at `now`),
+   * marks the user's other open tokens used, sets the new password hash and revokes all
+   * of the user's sessions. Returns the user id, or null if the token was not usable.
+   */
+  completePasswordReset(tokenHash: string, passwordHash: string, now: Date): Promise<string | null>;
 
   recordAudit(entry: NewAuditEntry): Promise<void>;
   listAudit(limit: number): Promise<AuditEntry[]>;

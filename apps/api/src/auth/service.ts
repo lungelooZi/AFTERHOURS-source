@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { errors } from '../errors.ts';
+import type { Mailer } from '../mail/mailer.ts';
 import { dummyHash, hashPassword, needsRehash, verifyPassword, type ScryptParams, DEFAULT_PARAMS } from './password.ts';
 import type { AttemptLimiter } from './rate-limiter.ts';
 import { generateSessionToken, hashToken } from './tokens.ts';
@@ -18,14 +19,27 @@ export const loginSchema = z.object({
 
 export const roleSchema = z.object({ role: z.enum(ROLES) });
 
+export const resetRequestSchema = z.object({
+  email: z.string().max(254).transform((e) => e.trim().toLowerCase()),
+});
+
+export const resetConfirmSchema = z.object({
+  token: z.string().min(20).max(128),
+  password: registerSchema.shape.password,
+});
+
 export type RequestContext = { ip: string | null; userAgent: string | null };
 export type IssuedSession = { user: User; token: string; expiresAt: Date };
 
 export type AuthServiceOptions = {
   store: AuthStore;
   /** `account` limits one IP guessing one email; `ip` (looser) limits one IP spraying many emails. */
-  limiters: { account: AttemptLimiter; ip: AttemptLimiter };
+  limiters: { account: AttemptLimiter; ip: AttemptLimiter; reset: AttemptLimiter };
   sessionTtlMs: number;
+  mailer: Mailer;
+  /** Public URL of the web client, used to build reset links. */
+  appUrl: string;
+  resetTtlMs: number;
   now?: () => Date;
   hashParams?: ScryptParams;
 };
@@ -38,6 +52,10 @@ export class AuthService {
   private readonly store: AuthStore;
   private readonly accountLimiter: AttemptLimiter;
   private readonly ipLimiter: AttemptLimiter;
+  private readonly resetLimiter: AttemptLimiter;
+  private readonly mailer: Mailer;
+  private readonly appUrl: string;
+  private readonly resetTtl: number;
   private readonly ttl: number;
   private readonly now: () => Date;
   private readonly hashParams: ScryptParams;
@@ -46,6 +64,10 @@ export class AuthService {
     this.store = options.store;
     this.accountLimiter = options.limiters.account;
     this.ipLimiter = options.limiters.ip;
+    this.resetLimiter = options.limiters.reset;
+    this.mailer = options.mailer;
+    this.appUrl = options.appUrl.replace(/\/+$/, '');
+    this.resetTtl = options.resetTtlMs;
     this.ttl = options.sessionTtlMs;
     this.now = options.now ?? (() => new Date());
     this.hashParams = options.hashParams ?? DEFAULT_PARAMS;
@@ -145,6 +167,73 @@ export class AuthService {
       metadata: { from: before.role, to: after.role },
     });
     return after;
+  }
+
+  /**
+   * Starts a password reset. Responds identically whether or not the email has an
+   * account, and sends the email without waiting, so neither the response nor its
+   * timing reveals which emails are registered.
+   */
+  async requestPasswordReset(input: unknown, ctx: RequestContext): Promise<void> {
+    const parsed = resetRequestSchema.safeParse(input);
+    if (!parsed.success) throw errors.validation(z.flattenError(parsed.error).fieldErrors);
+    const { email } = parsed.data;
+
+    const key = `${ctx.ip ?? 'unknown'}:${email}`;
+    const wait = this.resetLimiter.retryAfter(key);
+    if (wait > 0) throw errors.rateLimited(wait);
+    this.resetLimiter.recordFailure(key);
+
+    const user = await this.store.findUserByEmail(email);
+    await this.store.recordAudit({
+      actorId: user?.id ?? null,
+      action: 'password.reset_requested',
+      targetId: user?.id ?? null,
+      ip: ctx.ip,
+      metadata: user ? {} : { reason: 'unknown_email' },
+    });
+    if (!user) return;
+
+    const token = generateSessionToken();
+    const minutes = Math.round(this.resetTtl / 60_000);
+    await this.store.createPasswordReset({
+      tokenHash: hashToken(token),
+      userId: user.id,
+      expiresAt: new Date(this.now().getTime() + this.resetTtl),
+      ip: ctx.ip,
+    });
+    // The token goes in the URL fragment, which browsers never send to servers.
+    const link = `${this.appUrl}/#reset=${token}`;
+    void this.mailer
+      .send({
+        to: user.email,
+        subject: 'Reset your AFTERHOURS password',
+        text: [
+          `Hi ${user.displayName},`,
+          '',
+          'Someone asked to reset the password for your AFTERHOURS account.',
+          `Open this link within ${minutes} minutes to choose a new password:`,
+          '',
+          link,
+          '',
+          "If this wasn't you, you can ignore this email. Your password has not changed.",
+        ].join('\n'),
+      })
+      .catch((err: Error) => console.error('[mail] failed to send reset email:', err.message));
+  }
+
+  /** Sets a new password from a reset token, then signs the user out everywhere. */
+  async resetPassword(input: unknown, ctx: RequestContext): Promise<void> {
+    const parsed = resetConfirmSchema.safeParse(input);
+    if (!parsed.success) {
+      const fields = z.flattenError(parsed.error).fieldErrors;
+      if (fields.token) throw errors.invalidResetToken();
+      throw errors.validation(fields);
+    }
+    const passwordHash = await hashPassword(parsed.data.password, this.hashParams);
+    const userId = await this.store.completePasswordReset(hashToken(parsed.data.token), passwordHash, this.now());
+    if (!userId) throw errors.invalidResetToken();
+    await this.store.recordAudit({ actorId: userId, action: 'password.reset_completed', targetId: userId, ip: ctx.ip, metadata: {} });
   }
 
   private async issueSession(user: User, ctx: RequestContext): Promise<IssuedSession> {
