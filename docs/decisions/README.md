@@ -11,3 +11,4 @@ the decision, and the consequences we accepted.
 | [0004](0004-scrypt-password-hashing.md) | scrypt from Node's standard library for passwords | Accepted |
 | [0005](0005-in-memory-rate-limiting-until-we-scale.md) | In-memory rate limiting until we run more than one instance | Accepted |
 | [0006](0006-fastify-over-nestjs.md) | Fastify with plain modules instead of NestJS | Accepted |
+| [0007](0007-same-origin-api-proxy.md) | Serve the API through the web server (same origin) | Accepted |

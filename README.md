@@ -13,7 +13,7 @@ Original project by Lungelo Zikalala. All people, places and records in the case
 
 | Path | What it is | Status |
 |------|------------|--------|
-| [`apps/web`](apps/web) | The player client: Case 001, nine desktop apps in a window interface | Playable |
+| [`apps/web`](apps/web) | The player client: Case 001 in a desktop-style interface, plus accounts; forwards `/api/*` to the API | Playable |
 | [`packages/game-engine`](packages/game-engine) | Pure case rules: evidence gating, deductions, timeline, endings, save validation | Tested |
 | [`apps/api`](apps/api) | Platform API: accounts, sessions, roles, audit log | Phase 2 in progress |
 | [`docs/`](docs) | [Architecture](docs/architecture/overview.md), [decisions](docs/decisions), [OpenAPI](docs/api/openapi.yaml) | |
@@ -46,7 +46,12 @@ npm run dev:api
 ~~~
 
 The API listens on http://localhost:4000 and applies database migrations on start.
-Try it:
+With both running (`npm start` in one terminal, `npm run dev:api` in another), open
+http://localhost:3000 and use the **Account** app to create an account. The game server
+forwards `/api/*` to the API ([ADR-0007](docs/decisions/0007-same-origin-api-proxy.md));
+set `API_URL` if the API runs elsewhere.
+
+Or call the API directly:
 
 ~~~
 curl -c jar.txt -H "content-type: application/json" \
@@ -61,7 +66,7 @@ Make yourself an admin: `npm run promote -w @afterhours/api -- you@example.com a
 
 ~~~
 npm run typecheck          # strict TypeScript across api and game-engine
-npm test                   # game-engine (node:test) + API unit and HTTP tests (Vitest)
+npm test                   # game-engine, web server + account client (node:test), API (Vitest)
 npm run test:integration   # API against real Postgres
 ~~~
 
@@ -84,13 +89,17 @@ CI runs all three on every push and pull request.
   `Retry-After` ([ADR-0005](docs/decisions/0005-in-memory-rate-limiting-until-we-scale.md)).
 - **Database as a second line of defence.** Case-insensitive unique emails, role `CHECK`
   constraints, cascading sessions, append-only audit log, concurrency-safe migrations.
+- **One origin, no CORS.** The game server proxies `/api/*`, overwriting
+  `X-Forwarded-For` so clients can't spoof the IP the rate limiter sees
+  ([ADR-0007](docs/decisions/0007-same-origin-api-proxy.md)).
 - **No build step.** TypeScript runs directly on Node's type stripping and is checked by
   `tsc --noEmit` ([ADR-0002](docs/decisions/0002-typescript-without-a-build-step.md)).
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md). Next up: sign-in screens in the client, password reset,
-then moving case progress and rule enforcement to the server.
+See [ROADMAP.md](ROADMAP.md) and the [open issues](https://github.com/lungelooZi/AFTERHOURS-source/issues).
+Next up: password reset (#3), a devices page (#4), then moving case progress and rule
+enforcement to the server (#5).
 
 ## Known limitations
 

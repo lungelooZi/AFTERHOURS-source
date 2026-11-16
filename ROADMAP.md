@@ -18,13 +18,13 @@ creating mysteries. Each phase ships something usable and keeps the game working
 - [x] Roles: player, creator, admin; admin role management
 - [x] Login rate limiting (per account+IP and per IP)
 - [x] Audit log of security events
-- [ ] Sign-in / sign-up screens in the web client
-- [ ] Password reset by email (single-use, expiring tokens)
-- [ ] List and revoke individual sessions ("devices") from account settings
+- [x] Sign-in / sign-up screens in the web client, served same-origin through an `/api` proxy (#2)
+- [ ] Password reset by email (single-use, expiring tokens) (#3)
+- [ ] List and revoke individual sessions ("devices") from account settings (#4)
 
 ## Phase 3: Cases on the server (v0.5)
 
-- Case progress saved to the account instead of `localStorage`
+- Case progress saved to the account instead of `localStorage` (#5)
 - The API validates every action with `game-engine`, so answers stop shipping to the browser
 - Case catalogue: Case 001 becomes the first entry of a `cases` table
 - Player client moves to React/Next.js with Playwright tests for the core flows
