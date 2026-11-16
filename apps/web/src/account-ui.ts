@@ -1,4 +1,4 @@
-import { createAccountClient, resetTokenFromHash } from '/account.js';
+import { createAccountClient, resetTokenFromHash, describeDevice, timeAgo } from '/account.js';
 
 // Account window and header identity. Rendering only: requests and error wording
 // live in account.ts, which is unit-tested.
@@ -112,6 +112,36 @@ function renderReset(body, rerender) {
   };
 }
 
+/** "Where you're signed in": filled in once the list arrives. */
+function renderDevices(body, rerender) {
+  const section = el('section', '', { class: 'devices', 'aria-label': 'Signed-in devices' });
+  section.append(el('h3', "Where you're signed in"));
+  const list = el('ul', '', { class: 'device-list' });
+  const status = statusLine(section);
+  status.textContent = 'Loading devices…';
+  section.append(list);
+  body.append(section);
+
+  account.listDevices().then((result) => {
+    status.textContent = result.ok ? '' : result.message;
+    if (!result.ok) return;
+    for (const device of result.value) {
+      const item = el('li', '', { class: 'device' });
+      const name = el('strong', describeDevice(device.userAgent));
+      item.append(name);
+      if (device.current) item.append(el('span', 'This device', { class: 'tag' }));
+      const details = [device.ip ? `IP ${device.ip}` : null, `active ${timeAgo(device.lastUsedAt)}`, `signed in ${timeAgo(device.createdAt)}`].filter(Boolean).join(' · ');
+      item.append(el('small', details, { class: 'muted' }));
+      if (!device.current) {
+        const button = el('button', 'Sign out', { type: 'button', 'aria-label': `Sign out ${describeDevice(device.userAgent)}` });
+        button.onclick = () => submitWith(button, status, () => account.signOutDevice(device.id), () => rerender());
+        item.append(button);
+      }
+      list.append(item);
+    }
+  });
+}
+
 export function renderAccount(app, body, rerender) {
   if (app !== 'account') return;
   const text = (value, tag = 'p') => body.appendChild(el(tag, value));
@@ -126,6 +156,7 @@ export function renderAccount(app, body, rerender) {
     out.onclick = () => submitWith(out, status, () => account.signOut(), async () => { await refreshIdentity(); rerender(); });
     everywhere.onclick = () => submitWith(everywhere, status, () => account.signOutEverywhere(), async () => { await refreshIdentity(); rerender(); });
     body.append(out, everywhere);
+    renderDevices(body, rerender);
     return;
   }
 

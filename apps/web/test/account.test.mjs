@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createAccountClient, messageFor, resetTokenFromHash } from '../src/account.ts';
+import { createAccountClient, describeDevice, messageFor, resetTokenFromHash, timeAgo } from '../src/account.ts';
 
 /** A fake fetch that answers from a table and records each call. */
 function fakeFetch(table) {
@@ -88,4 +88,33 @@ test('reset tokens are read only from a well-formed #reset= fragment', () => {
   for (const hash of ['', '#', '#reset=', '#reset=short', `#reset=${token}&x=1`, `#other=${token}`, `#reset=${token}<script>`]) {
     assert.equal(resetTokenFromHash(hash), null, hash);
   }
+});
+
+test('devices: list and sign out one device by id', async () => {
+  const devices = [{ id: 'abc', userAgent: 'x', ip: null, createdAt: '', lastUsedAt: '', expiresAt: '', current: true }];
+  const f = fakeFetch({ 'GET /api/auth/sessions': [200, { sessions: devices }], 'DELETE /api/auth/sessions/a%2Fb': [204] });
+  const client = createAccountClient(f);
+  assert.deepEqual(await client.listDevices(), { ok: true, value: devices });
+  assert.equal((await client.signOutDevice('a/b')).ok, true, 'ids are URL-encoded');
+});
+
+test('describeDevice names common browsers and systems', () => {
+  const cases = {
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36': 'Chrome on Windows',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0': 'Edge on Windows',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15': 'Safari on macOS',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1': 'Safari on iOS',
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36': 'Chrome on Android',
+    'Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0': 'Firefox on Linux',
+    'curl/8.5.0': 'API client',
+  };
+  for (const [ua, expected] of Object.entries(cases)) assert.equal(describeDevice(ua), expected, ua);
+  assert.equal(describeDevice(null), 'Unknown device');
+});
+
+test('timeAgo gives short human times', () => {
+  const now = new Date('2026-11-16T12:00:00Z');
+  const ago = (s) => timeAgo(new Date(now.getTime() - s * 1000).toISOString(), now);
+  assert.deepEqual([ago(5), ago(60), ago(150), ago(3600), ago(7200), ago(86400 + 5), ago(3 * 86400), ago(-30)],
+    ['just now', '1 minute ago', '2 minutes ago', '1 hour ago', '2 hours ago', 'yesterday', '3 days ago', 'just now']);
 });

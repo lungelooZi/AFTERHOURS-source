@@ -3,6 +3,16 @@
 
 export type User = { id: string; email: string; displayName: string; role: 'player' | 'creator' | 'admin'; createdAt: string };
 
+export type Device = {
+  id: string;
+  userAgent: string | null;
+  ip: string | null;
+  createdAt: string;
+  lastUsedAt: string;
+  expiresAt: string;
+  current: boolean;
+};
+
 export type Failure = { ok: false; code: string; message: string };
 export type Result<T> = { ok: true; value: T } | Failure;
 
@@ -78,6 +88,11 @@ export function createAccountClient(fetchFn: FetchLike = (url, init) => fetch(ur
     /** Always reports success for a valid email, whether or not an account exists. */
     requestPasswordReset: (email: string) => call<{ message: string }>('POST', '/auth/password-reset', { email }),
     resetPassword: (token: string, password: string) => call<null>('POST', '/auth/password-reset/confirm', { token, password }),
+    async listDevices(): Promise<Result<Device[]>> {
+      const result = await call<{ sessions: Device[] }>('GET', '/auth/sessions');
+      return result.ok ? { ok: true, value: result.value.sessions } : result;
+    },
+    signOutDevice: (id: string) => call<null>('DELETE', `/auth/sessions/${encodeURIComponent(id)}`),
     signOut: () => call<null>('POST', '/auth/logout'),
     signOutEverywhere: () => call<null>('POST', '/auth/logout-all'),
   };
@@ -89,4 +104,43 @@ export type AccountClient = ReturnType<typeof createAccountClient>;
 export function resetTokenFromHash(hash: string): string | null {
   const match = /^#reset=([A-Za-z0-9_-]{20,128})$/.exec(hash);
   return match?.[1] ?? null;
+}
+
+/** "Chrome on Windows" from a User-Agent string. Order matters: Edge and Opera also say Chrome, Chrome also says Safari. */
+export function describeDevice(userAgent: string | null): string {
+  if (!userAgent) return 'Unknown device';
+  const ua = userAgent;
+  const browser =
+    /Edg\//.test(ua) ? 'Edge'
+    : /OPR\/|Opera/.test(ua) ? 'Opera'
+    : /Firefox\/|FxiOS/.test(ua) ? 'Firefox'
+    : /Chrome\/|CriOS/.test(ua) ? 'Chrome'
+    : /Safari\//.test(ua) ? 'Safari'
+    : /curl|PostmanRuntime|node|python|Go-http/i.test(ua) ? 'API client'
+    : 'Unknown browser';
+  const os =
+    /iPhone|iPad|iPod/.test(ua) ? 'iOS'
+    : /Android/.test(ua) ? 'Android'
+    : /CrOS/.test(ua) ? 'ChromeOS'
+    : /Windows/.test(ua) ? 'Windows'
+    : /Mac OS X|Macintosh/.test(ua) ? 'macOS'
+    : /Linux/.test(ua) ? 'Linux'
+    : null;
+  return os ? `${browser} on ${os}` : browser;
+}
+
+/** "just now", "5 minutes ago", "yesterday", "3 days ago". */
+export function timeAgo(iso: string, now: Date = new Date()): string {
+  const seconds = Math.max(0, Math.round((now.getTime() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return 'just now';
+  const units: [number, string][] = [[60, 'minute'], [3600, 'hour'], [86400, 'day']];
+  if (seconds >= 86400 && seconds < 2 * 86400) return 'yesterday';
+  for (let i = units.length - 1; i >= 0; i--) {
+    const [size, name] = units[i]!;
+    if (seconds >= size) {
+      const n = Math.floor(seconds / size);
+      return `${n} ${name}${n === 1 ? '' : 's'} ago`;
+    }
+  }
+  return 'just now';
 }
