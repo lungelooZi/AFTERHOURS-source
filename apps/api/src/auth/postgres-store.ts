@@ -4,6 +4,7 @@ import {
   type AuditEntry,
   type AuthStore,
   type NewAuditEntry,
+  type NewPasswordReset,
   type NewSession,
   type NewUser,
   type Role,
@@ -112,6 +113,42 @@ export class PostgresAuthStore implements AuthStore {
   async revokeAllSessions(userId: string, now: Date): Promise<number> {
     const result = await this.db.query('UPDATE sessions SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL', [userId, now]);
     return result.rowCount ?? 0;
+  }
+
+  async createPasswordReset(r: NewPasswordReset): Promise<void> {
+    await this.db.query('INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, ip) VALUES ($1, $2, $3, $4)', [
+      r.tokenHash, r.userId, r.expiresAt, r.ip,
+    ]);
+  }
+
+  async completePasswordReset(tokenHash: string, passwordHash: string, now: Date): Promise<string | null> {
+    const client = await this.db.connect();
+    try {
+      await client.query('BEGIN');
+      // The row lock taken by this UPDATE makes a concurrent use of the same token wait,
+      // then match zero rows because used_at is no longer NULL.
+      const { rows } = await client.query<{ user_id: string }>(
+        `UPDATE password_reset_tokens SET used_at = $2
+          WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2
+          RETURNING user_id`,
+        [tokenHash, now],
+      );
+      const userId = rows[0]?.user_id;
+      if (!userId) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      await client.query('UPDATE password_reset_tokens SET used_at = $2 WHERE user_id = $1 AND used_at IS NULL', [userId, now]);
+      await client.query('UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1', [userId, passwordHash]);
+      await client.query('UPDATE sessions SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL', [userId, now]);
+      await client.query('COMMIT');
+      return userId;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   async recordAudit(e: NewAuditEntry): Promise<void> {

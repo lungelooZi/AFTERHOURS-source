@@ -5,6 +5,7 @@ import { AuthService } from './auth/service.ts';
 import { loadConfig } from './config.ts';
 import { migrate } from './db/migrate.ts';
 import { createPool, ping } from './db/pool.ts';
+import { ConsoleMailer } from './mail/mailer.ts';
 
 const config = loadConfig();
 const pool = createPool(config.databaseUrl);
@@ -14,12 +15,21 @@ const store = new PostgresAuthStore(pool);
 const limiters = {
   account: new SlidingWindowLimiter(config.login.maxAttempts, config.login.windowMs),
   ip: new SlidingWindowLimiter(config.login.maxAttempts * 10, config.login.windowMs),
+  // At most 3 reset emails per email address and IP per hour.
+  reset: new SlidingWindowLimiter(3, 60 * 60 * 1000),
 };
 const sweeper = setInterval(() => Object.values(limiters).forEach((l) => l.sweep()), 60_000);
 sweeper.unref();
 
 const app = await buildApp({
-  auth: new AuthService({ store, limiters, sessionTtlMs: config.sessionTtlMs }),
+  auth: new AuthService({
+    store,
+    limiters,
+    sessionTtlMs: config.sessionTtlMs,
+    mailer: new ConsoleMailer(),
+    appUrl: config.appUrl,
+    resetTtlMs: config.passwordResetTtlMs,
+  }),
   store,
   checkDatabase: () => ping(pool),
   secureCookies: config.env === 'production',

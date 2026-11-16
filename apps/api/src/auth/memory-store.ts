@@ -4,6 +4,7 @@ import {
   type AuditEntry,
   type AuthStore,
   type NewAuditEntry,
+  type NewPasswordReset,
   type NewSession,
   type NewUser,
   type Role,
@@ -17,6 +18,7 @@ export class MemoryAuthStore implements AuthStore {
   private readonly users = new Map<string, UserWithSecret>();
   private readonly sessions = new Map<string, Session>();
   private readonly audit: AuditEntry[] = [];
+  private readonly resets = new Map<string, NewPasswordReset & { usedAt: Date | null }>();
 
   private static publicUser({ passwordHash: _omit, ...user }: UserWithSecret): User {
     return { ...user };
@@ -78,6 +80,19 @@ export class MemoryAuthStore implements AuthStore {
       }
     }
     return count;
+  }
+
+  async createPasswordReset(reset: NewPasswordReset): Promise<void> {
+    this.resets.set(reset.tokenHash, { ...reset, usedAt: null });
+  }
+
+  async completePasswordReset(tokenHash: string, passwordHash: string, now: Date): Promise<string | null> {
+    const reset = this.resets.get(tokenHash);
+    if (!reset || reset.usedAt || reset.expiresAt <= now) return null;
+    for (const r of this.resets.values()) if (r.userId === reset.userId && !r.usedAt) r.usedAt = now;
+    await this.updatePasswordHash(reset.userId, passwordHash);
+    await this.revokeAllSessions(reset.userId, now);
+    return reset.userId;
   }
 
   async recordAudit(entry: NewAuditEntry): Promise<void> {

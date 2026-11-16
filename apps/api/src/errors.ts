@@ -20,6 +20,7 @@ export const errors = {
   forbidden: () => new AppError(403, 'forbidden', 'You do not have permission to do that.'),
   notFound: (what: string) => new AppError(404, 'not_found', `${what} was not found.`),
   emailTaken: () => new AppError(409, 'email_taken', 'An account with that email already exists.'),
+  invalidResetToken: () => new AppError(400, 'invalid_reset_token', 'This reset link is invalid, already used or expired.'),
   rateLimited: (retryAfterSeconds: number) =>
     new AppError(429, 'rate_limited', 'Too many attempts. Try again later.', { retryAfterSeconds }),
 };
