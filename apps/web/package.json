@@ -1,0 +1,10 @@
+{
+  "name": "@afterhours/web",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "The AFTERHOURS player client: Case 001, The Missing Hour.",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}
