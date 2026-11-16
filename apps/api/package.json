@@ -1,0 +1,25 @@
+{
+  "name": "@afterhours/api",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "AFTERHOURS platform API: identity, sessions, roles and (next) rooms, case nights and the creator API.",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.ts",
+    "dev": "node --env-file-if-exists=.env --watch src/server.ts",
+    "migrate": "node --env-file-if-exists=.env src/scripts/migrate.ts",
+    "promote": "node --env-file-if-exists=.env src/scripts/promote.ts",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.0",
+    "fastify": "^5.6.0",
+    "pg": "^8.16.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.0",
+    "vitest": "^4.0.0"
+  }
+}
