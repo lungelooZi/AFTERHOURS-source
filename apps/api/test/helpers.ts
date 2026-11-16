@@ -32,13 +32,14 @@ export function makeService(opts: { store?: AuthStore; clock?: FakeClock; ttlMs?
   return { auth, store, clock, limiters };
 }
 
-export async function makeApp(opts: Parameters<typeof makeService>[0] & { dbUp?: boolean } = {}) {
+export async function makeApp(opts: Parameters<typeof makeService>[0] & { dbUp?: boolean; trustProxy?: boolean | string } = {}) {
   const service = makeService(opts);
   const app = await buildApp({
     auth: service.auth,
     store: service.store,
     checkDatabase: async () => opts.dbUp ?? true,
     secureCookies: false,
+    trustProxy: opts.trustProxy,
   });
   return { app, ...service };
 }

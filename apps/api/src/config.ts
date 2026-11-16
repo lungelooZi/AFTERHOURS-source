@@ -13,10 +13,11 @@ const schema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 90).default(24 * 7),
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
   LOGIN_WINDOW_MINUTES: z.coerce.number().int().min(1).default(15),
+  // false | true | 'loopback' | comma-separated IPs/CIDRs of proxies to trust.
   TRUST_PROXY: z
-    .enum(['true', 'false'])
+    .string()
     .default('false')
-    .transform((v) => v === 'true'),
+    .transform((v): boolean | string => (v === 'true' ? true : v === 'false' ? false : v)),
 });
 
 export type Config = {
@@ -26,7 +27,8 @@ export type Config = {
   databaseUrl: string;
   sessionTtlMs: number;
   login: { maxAttempts: number; windowMs: number };
-  trustProxy: boolean;
+  /** Which proxies may set X-Forwarded-For. See docs/decisions/0007. */
+  trustProxy: boolean | string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
