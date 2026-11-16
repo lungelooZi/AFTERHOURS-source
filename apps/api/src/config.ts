@@ -9,7 +9,10 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   HOST: z.string().default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
-  DATABASE_URL: z.string().url(),
+  // postgres: the real database. memory: no database at all; everything is lost on
+  // restart. Meant for trying the game quickly and for end-to-end tests.
+  STORE: z.enum(['postgres', 'memory']).default('postgres'),
+  DATABASE_URL: z.string().url().optional(),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 90).default(24 * 7),
   LOGIN_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
   LOGIN_WINDOW_MINUTES: z.coerce.number().int().min(1).default(15),
@@ -26,7 +29,9 @@ export type Config = {
   env: 'development' | 'test' | 'production';
   host: string;
   port: number;
-  databaseUrl: string;
+  store: 'postgres' | 'memory';
+  /** Present whenever store is 'postgres'. */
+  databaseUrl: string | undefined;
   sessionTtlMs: number;
   login: { maxAttempts: number; windowMs: number };
   appUrl: string;
@@ -42,10 +47,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error(`Invalid configuration:\n${problems}\nSee .env.example for the expected variables.`);
   }
   const c = parsed.data;
+  if (c.STORE === 'postgres' && !c.DATABASE_URL) {
+    throw new Error('Invalid configuration:\n  - DATABASE_URL: required when STORE=postgres (or set STORE=memory to run without a database)\nSee .env.example for the expected variables.');
+  }
   return {
     env: c.NODE_ENV,
     host: c.HOST,
     port: c.PORT,
+    store: c.STORE,
     databaseUrl: c.DATABASE_URL,
     sessionTtlMs: c.SESSION_TTL_HOURS * 60 * 60 * 1000,
     login: { maxAttempts: c.LOGIN_MAX_ATTEMPTS, windowMs: c.LOGIN_WINDOW_MINUTES * 60 * 1000 },

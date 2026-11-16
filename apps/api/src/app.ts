@@ -4,14 +4,17 @@ import { adminRoutes } from './admin/routes.ts';
 import { authRoutes, registerAuthentication } from './auth/routes.ts';
 import type { AuthService } from './auth/service.ts';
 import type { AuthStore } from './auth/types.ts';
+import { caseRoutes } from './cases/routes.ts';
+import type { CaseService } from './cases/service.ts';
 import { AppError } from './errors.ts';
 import { healthRoutes } from './health/routes.ts';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 
 export type AppDependencies = {
   auth: AuthService;
   store: AuthStore;
+  cases: CaseService;
   checkDatabase: () => Promise<boolean>;
   secureCookies: boolean;
   trustProxy?: boolean | string;
@@ -56,5 +59,6 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   await app.register(healthRoutes(deps.checkDatabase, VERSION));
   await app.register(authRoutes(deps.auth, { secureCookies: deps.secureCookies }));
   await app.register(adminRoutes(deps.auth, deps.store));
+  await app.register(caseRoutes(deps.cases, { secureCookies: deps.secureCookies }));
   return app;
 }

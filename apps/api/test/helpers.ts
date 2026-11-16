@@ -5,6 +5,9 @@ import { SlidingWindowLimiter } from '../src/auth/rate-limiter.ts';
 import { AuthService } from '../src/auth/service.ts';
 import type { AuthStore } from '../src/auth/types.ts';
 import { MemoryMailer } from '../src/mail/mailer.ts';
+import { MemoryCaseStore } from '../src/cases/memory-store.ts';
+import { CaseService } from '../src/cases/service.ts';
+import type { CaseStore } from '../src/cases/store.ts';
 
 /** Cheap scrypt parameters so the suite stays fast. Production uses DEFAULT_PARAMS. */
 export const FAST_HASH: ScryptParams = { N: 2 ** 10, r: 8, p: 1, keyLength: 64 };
@@ -44,16 +47,28 @@ export function makeService(opts: { store?: AuthStore; clock?: FakeClock; ttlMs?
   return { auth, store, clock, limiters, mailer };
 }
 
-export async function makeApp(opts: Parameters<typeof makeService>[0] & { dbUp?: boolean; trustProxy?: boolean | string } = {}) {
+export function makeCases(opts: { caseStore?: CaseStore; clock?: FakeClock; guestLimit?: number } = {}) {
+  const clock = opts.clock ?? new FakeClock();
+  const caseStore = opts.caseStore ?? new MemoryCaseStore();
+  const guestLimiter = new SlidingWindowLimiter(opts.guestLimit ?? 30, 60 * 60_000, clock.nowMs);
+  const guessLimiter = new SlidingWindowLimiter(10, 10 * 60_000, clock.nowMs);
+  return { cases: new CaseService({ store: caseStore, guestLimiter, guessLimiter }), caseStore };
+}
+
+export async function makeApp(
+  opts: Parameters<typeof makeService>[0] & { dbUp?: boolean; trustProxy?: boolean | string; caseStore?: CaseStore; guestLimit?: number } = {},
+) {
   const service = makeService(opts);
+  const { cases, caseStore } = makeCases({ caseStore: opts.caseStore, clock: service.clock, guestLimit: opts.guestLimit });
   const app = await buildApp({
     auth: service.auth,
     store: service.store,
+    cases,
     checkDatabase: async () => opts.dbUp ?? true,
     secureCookies: false,
     trustProxy: opts.trustProxy,
   });
-  return { app, ...service };
+  return { app, ...service, cases, caseStore };
 }
 
 export const ctx = { ip: '203.0.113.7', userAgent: 'vitest' };

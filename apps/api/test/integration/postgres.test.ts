@@ -6,6 +6,8 @@ import { EmailTakenError } from '../../src/auth/types.ts';
 import { migrate } from '../../src/db/migrate.ts';
 import { createPool, ping } from '../../src/db/pool.ts';
 import { hashToken } from '../../src/auth/tokens.ts';
+import { PostgresCaseStore } from '../../src/cases/postgres-store.ts';
+import { freshRun } from '@afterhours/game-engine';
 import { alice, makeApp } from '../helpers.ts';
 
 /**
@@ -21,12 +23,12 @@ describe.skipIf(!url)('Postgres integration', () => {
 
   beforeAll(async () => {
     pool = createPool(url!);
-    await pool.query('DROP TABLE IF EXISTS password_reset_tokens, audit_log, sessions, users, schema_migrations CASCADE');
+    await pool.query('DROP TABLE IF EXISTS case_runs, password_reset_tokens, audit_log, sessions, users, schema_migrations CASCADE');
     await migrate(pool, () => undefined);
     store = new PostgresAuthStore(pool);
   });
   beforeEach(async () => {
-    await pool.query('TRUNCATE password_reset_tokens, audit_log, sessions, users RESTART IDENTITY CASCADE');
+    await pool.query('TRUNCATE case_runs, password_reset_tokens, audit_log, sessions, users RESTART IDENTITY CASCADE');
   });
   afterAll(async () => {
     await pool?.end();
@@ -35,14 +37,14 @@ describe.skipIf(!url)('Postgres integration', () => {
   it('migrations are idempotent and recorded', async () => {
     expect(await migrate(pool, () => undefined)).toEqual([]);
     const { rows } = await pool.query('SELECT name FROM schema_migrations');
-    expect(rows.map((r) => r.name)).toEqual(expect.arrayContaining(['0001_identity.sql', '0002_password_resets.sql', '0003_session_ids.sql']));
+    expect(rows.map((r) => r.name)).toEqual(expect.arrayContaining(['0001_identity.sql', '0002_password_resets.sql', '0003_session_ids.sql', '0004_case_runs.sql']));
     expect(await ping(pool)).toBe(true);
   });
 
   it('concurrent migration runs do not collide (advisory lock)', async () => {
-    await pool.query('DROP TABLE IF EXISTS password_reset_tokens, audit_log, sessions, users, schema_migrations CASCADE');
+    await pool.query('DROP TABLE IF EXISTS case_runs, password_reset_tokens, audit_log, sessions, users, schema_migrations CASCADE');
     const results = await Promise.all([migrate(pool, () => undefined), migrate(pool, () => undefined)]);
-    expect(results.flat()).toEqual(['0001_identity.sql', '0002_password_resets.sql', '0003_session_ids.sql']);
+    expect(results.flat()).toEqual(['0001_identity.sql', '0002_password_resets.sql', '0003_session_ids.sql', '0004_case_runs.sql']);
   });
 
   it('enforces case-insensitive unique emails at the database level', async () => {
@@ -152,6 +154,59 @@ describe.skipIf(!url)('Postgres integration', () => {
       expect(await store.revokeSessionById(a.id, sessions[1]!.id, new Date())).toBe(true);
       expect((await store.listActiveSessions(a.id, new Date())).map((s) => s.userAgent)).toEqual(['A2']);
       expect(await store.findActiveSession('f'.repeat(64), new Date())).not.toBeNull();
+    });
+  });
+
+  describe('case runs', () => {
+    const guest = { kind: 'guest' as const, tokenHash: 'a'.repeat(64) };
+
+    it('concurrent first visits create exactly one run', async () => {
+      const cases = new PostgresCaseStore(pool);
+      const runs = await Promise.all(Array.from({ length: 5 }, () => cases.createRun(guest, 'case-001', freshRun())));
+      expect(new Set(runs.map((r) => r.id)).size).toBe(1);
+    });
+
+    it('saves only from the version that was read (optimistic locking)', async () => {
+      const cases = new PostgresCaseStore(pool);
+      const run = await cases.createRun(guest, 'case-001', freshRun());
+      const changed = { ...freshRun(), found: ['message'] };
+      expect(await cases.saveRun(run.id, changed, run.version)).toBe(true);
+      expect(await cases.saveRun(run.id, freshRun(), run.version)).toBe(false);
+      expect((await cases.findRun(guest, 'case-001'))).toMatchObject({ version: 2, state: changed });
+    });
+
+    it('claims a guest run for a user only if the user has none', async () => {
+      const cases = new PostgresCaseStore(pool);
+      const user = await store.createUser({ email: 'c@r.co', displayName: 'Case', passwordHash: 'x', role: 'player' });
+      const owner = { kind: 'user' as const, userId: user.id };
+      await cases.createRun(guest, 'case-001', { ...freshRun(), found: ['boat'] });
+      expect(await cases.claimGuestRun(guest.tokenHash, user.id, 'case-001')).toBe(true);
+      expect((await cases.findRun(owner, 'case-001'))?.state).toMatchObject({ found: ['boat'] });
+      expect(await cases.findRun(guest, 'case-001')).toBeNull();
+
+      const second = { kind: 'guest' as const, tokenHash: 'b'.repeat(64) };
+      await cases.createRun(second, 'case-001', freshRun());
+      expect(await cases.claimGuestRun(second.tokenHash, user.id, 'case-001')).toBe(false);
+    });
+
+    it('a run has exactly one owner, and goes when its user is deleted', async () => {
+      await expect(pool.query(`INSERT INTO case_runs (case_id, state) VALUES ('case-001', '{}')`)).rejects.toThrow(/case_runs_one_owner/);
+      const cases = new PostgresCaseStore(pool);
+      const user = await store.createUser({ email: 'd@r.co', displayName: 'Del', passwordHash: 'x', role: 'player' });
+      await cases.createRun({ kind: 'user', userId: user.id }, 'case-001', freshRun());
+      await pool.query('DELETE FROM users WHERE id = $1', [user.id]);
+      expect((await pool.query('SELECT count(*)::int AS n FROM case_runs')).rows[0].n).toBe(0);
+    });
+
+    it('full HTTP playthrough on Postgres', async () => {
+      const { app } = await makeApp({ store, caseStore: new PostgresCaseStore(pool) });
+      const first = await app.inject({ method: 'GET', url: '/cases/case-001' });
+      const cookie = first.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+      const act = (payload: object) => app.inject({ method: 'POST', url: '/cases/case-001/actions', payload, headers: { cookie } });
+      await act({ type: 'open', app: 'messages' });
+      await act({ type: 'open', app: 'files' });
+      expect((await act({ type: 'unlock', password: '1998' })).json().view.archive.unlocked).toBe(true);
+      await app.close();
     });
   });
 });
