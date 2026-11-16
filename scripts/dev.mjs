@@ -25,10 +25,12 @@ function start(name, cwd, args, env = {}) {
   return child;
 }
 
-// Only pass --env-file when the file exists: `node --watch` crashes trying to watch a missing one.
+// Only pass --env-file when the file exists: Node's watch mode crashes trying to watch a missing one.
+// Watch only the API's own code: plain --watch also follows node_modules, so an `npm install`
+// would restart the API and wipe all progress in memory mode (#11).
 const envFile = existsSync('apps/api/.env') ? ['--env-file=.env'] : [];
 const children = [
-  start('api', 'apps/api', [...envFile, '--watch', 'src/server.ts'], memory ? { STORE: 'memory', TRUST_PROXY: 'loopback' } : {}),
+  start('api', 'apps/api', [...envFile, '--watch-path=src', 'src/server.ts'], memory ? { STORE: 'memory', TRUST_PROXY: 'loopback' } : {}),
   start('web', 'apps/web', ['server.mjs']),
 ];
 
