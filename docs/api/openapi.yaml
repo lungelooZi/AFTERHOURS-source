@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AFTERHOURS API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Identity, sessions and roles for the AFTERHOURS platform.
     Browsers authenticate with the `ah_session` httpOnly cookie; other clients may send
@@ -119,6 +119,29 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { type: object, properties: { user: { $ref: '#/components/schemas/User' } } } } } }
         '401': { $ref: '#/components/responses/Error' }
+  /auth/sessions:
+    get:
+      summary: The current user's signed-in devices, most recently used first
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions: { type: array, items: { $ref: '#/components/schemas/DeviceSession' } }
+        '401': { $ref: '#/components/responses/Error' }
+  /auth/sessions/{id}:
+    delete:
+      summary: Sign out one of your own devices
+      description: Another user's session id, or an unknown id, returns 404. Clears the cookie if it is the current device.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Signed out }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
   /admin/users/{id}/role:
     patch:
       summary: Change a user's role (admin only)
@@ -158,6 +181,16 @@ components:
         displayName: { type: string }
         role: { $ref: '#/components/schemas/Role' }
         createdAt: { type: string, format: date-time }
+    DeviceSession:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        userAgent: { type: [string, 'null'] }
+        ip: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: string, format: date-time, description: Updated at most every 5 minutes }
+        expiresAt: { type: string, format: date-time }
+        current: { type: boolean }
     Error:
       type: object
       properties:

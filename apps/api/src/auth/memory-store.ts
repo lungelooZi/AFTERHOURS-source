@@ -56,7 +56,7 @@ export class MemoryAuthStore implements AuthStore {
   }
 
   async createSession(input: NewSession): Promise<void> {
-    this.sessions.set(input.tokenHash, { ...input, createdAt: new Date(), revokedAt: null });
+    this.sessions.set(input.tokenHash, { ...input, id: randomUUID(), lastUsedAt: input.createdAt, revokedAt: null });
   }
 
   async findActiveSession(tokenHash: string, now: Date) {
@@ -69,6 +69,25 @@ export class MemoryAuthStore implements AuthStore {
   async revokeSession(tokenHash: string, now: Date): Promise<void> {
     const session = this.sessions.get(tokenHash);
     if (session && !session.revokedAt) session.revokedAt = now;
+  }
+
+  async revokeSessionById(userId: string, sessionId: string, now: Date): Promise<boolean> {
+    const session = [...this.sessions.values()].find((s) => s.id === sessionId && s.userId === userId && !s.revokedAt && s.expiresAt > now);
+    if (!session) return false;
+    session.revokedAt = now;
+    return true;
+  }
+
+  async touchSession(tokenHash: string, now: Date): Promise<void> {
+    const session = this.sessions.get(tokenHash);
+    if (session) session.lastUsedAt = now;
+  }
+
+  async listActiveSessions(userId: string, now: Date): Promise<Session[]> {
+    return [...this.sessions.values()]
+      .filter((s) => s.userId === userId && !s.revokedAt && s.expiresAt > now)
+      .sort((a, b) => b.lastUsedAt.getTime() - a.lastUsedAt.getTime())
+      .map((s) => ({ ...s }));
   }
 
   async revokeAllSessions(userId: string, now: Date): Promise<number> {

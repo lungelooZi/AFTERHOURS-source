@@ -3,7 +3,7 @@
 AFTERHOURS is a mystery-game platform. Players investigate cases alone or together,
 communities gather for scheduled live "case nights", and creators publish their own cases.
 
-## Current system (v0.3)
+## Current system (v0.4)
 
 ```mermaid
 flowchart LR
@@ -55,6 +55,7 @@ milliseconds with an in-memory store and a fake clock, while
 ```mermaid
 erDiagram
   users ||--o{ sessions : has
+  users ||--o{ password_reset_tokens : requests
   users ||--o{ audit_log : "acts in"
   users {
     uuid id PK
@@ -65,10 +66,18 @@ erDiagram
   }
   sessions {
     char64 token_hash PK
+    uuid id UK "public id"
     uuid user_id FK
+    timestamptz last_used_at
     timestamptz expires_at
     timestamptz revoked_at
     inet ip
+  }
+  password_reset_tokens {
+    char64 token_hash PK
+    uuid user_id FK
+    timestamptz expires_at
+    timestamptz used_at
   }
   audit_log {
     bigint id PK

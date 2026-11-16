@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 import { errors } from '../errors.ts';
 import type { AuthService, IssuedSession, RequestContext } from './service.ts';
 import type { Role, User } from './types.ts';
@@ -9,6 +10,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     user: User | null;
     sessionToken: string | undefined;
+    sessionId: string | null;
   }
 }
 
@@ -28,9 +30,12 @@ function readToken(req: FastifyRequest): string | undefined {
 export function registerAuthentication(app: FastifyInstance, auth: AuthService): void {
   app.decorateRequest('user', null);
   app.decorateRequest('sessionToken', undefined);
+  app.decorateRequest('sessionId', null);
   app.addHook('onRequest', async (req) => {
     req.sessionToken = readToken(req);
-    req.user = await auth.authenticate(req.sessionToken);
+    const resolved = await auth.resolveSession(req.sessionToken);
+    req.user = resolved?.user ?? null;
+    req.sessionId = resolved?.sessionId ?? null;
   });
 }
 
@@ -85,6 +90,17 @@ export function authRoutes(auth: AuthService, opts: { secureCookies: boolean }) 
     });
 
     app.get('/auth/me', async (req) => ({ user: requireUser(req) }));
+
+    app.get('/auth/sessions', async (req) => ({ sessions: await auth.listDevices(requireUser(req), req.sessionId) }));
+
+    app.delete('/auth/sessions/:id', async (req, reply) => {
+      const user = requireUser(req);
+      const params = z.object({ id: z.uuid() }).safeParse(req.params);
+      if (!params.success) throw errors.notFound('Session');
+      await auth.revokeDevice(user, params.data.id, contextOf(req));
+      if (params.data.id === req.sessionId) clearCookie(reply);
+      return reply.code(204).send();
+    });
 
     app.post('/auth/password-reset', async (req, reply) => {
       await auth.requestPasswordReset(req.body, contextOf(req));

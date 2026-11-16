@@ -7,7 +7,7 @@ import type { AuthStore } from './auth/types.ts';
 import { AppError } from './errors.ts';
 import { healthRoutes } from './health/routes.ts';
 
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 
 export type AppDependencies = {
   auth: AuthService;

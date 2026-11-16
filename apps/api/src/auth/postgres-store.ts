@@ -25,6 +25,26 @@ const toUser = (r: UserRow): User => ({
   createdAt: r.created_at,
 });
 
+type SessionRow = {
+  session_id: string; token_hash: string; user_id: string; s_created_at: Date; expires_at: Date;
+  revoked_at: Date | null; last_used_at: Date; user_agent: string | null; ip: string | null;
+};
+
+const SESSION_COLUMNS = `s.id AS session_id, s.token_hash, s.user_id, s.created_at AS s_created_at, s.expires_at,
+  s.revoked_at, s.last_used_at, s.user_agent, host(s.ip) AS ip`;
+
+const toSession = (r: SessionRow): Session => ({
+  id: r.session_id,
+  tokenHash: r.token_hash,
+  userId: r.user_id,
+  createdAt: r.s_created_at,
+  expiresAt: r.expires_at,
+  revokedAt: r.revoked_at,
+  lastUsedAt: r.last_used_at,
+  userAgent: r.user_agent,
+  ip: r.ip,
+});
+
 /** Postgres implementation of AuthStore. Every query is parameterised. */
 export class PostgresAuthStore implements AuthStore {
   private readonly db: pg.Pool;
@@ -75,35 +95,45 @@ export class PostgresAuthStore implements AuthStore {
 
   async createSession(s: NewSession): Promise<void> {
     await this.db.query(
-      `INSERT INTO sessions (token_hash, user_id, expires_at, user_agent, ip) VALUES ($1, $2, $3, $4, $5)`,
-      [s.tokenHash, s.userId, s.expiresAt, s.userAgent, s.ip],
+      `INSERT INTO sessions (token_hash, user_id, created_at, last_used_at, expires_at, user_agent, ip)
+       VALUES ($1, $2, $3, $3, $4, $5, $6)`,
+      [s.tokenHash, s.userId, s.createdAt, s.expiresAt, s.userAgent, s.ip],
     );
   }
 
   async findActiveSession(tokenHash: string, now: Date): Promise<{ session: Session; user: User } | null> {
-    const { rows } = await this.db.query<
-      UserRow & { token_hash: string; user_id: string; s_created_at: Date; expires_at: Date; revoked_at: Date | null; user_agent: string | null; ip: string | null }
-    >(
-      `SELECT s.token_hash, s.user_id, s.created_at AS s_created_at, s.expires_at, s.revoked_at, s.user_agent, host(s.ip) AS ip,
-              ${USER_COLUMNS}
+    const { rows } = await this.db.query<UserRow & SessionRow>(
+      `SELECT ${SESSION_COLUMNS}, ${USER_COLUMNS}
          FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > $2`,
       [tokenHash, now],
     );
     const r = rows[0];
-    if (!r) return null;
-    return {
-      session: {
-        tokenHash: r.token_hash,
-        userId: r.user_id,
-        createdAt: r.s_created_at,
-        expiresAt: r.expires_at,
-        revokedAt: r.revoked_at,
-        userAgent: r.user_agent,
-        ip: r.ip,
-      },
-      user: toUser(r),
-    };
+    return r ? { session: toSession(r), user: toUser(r) } : null;
+  }
+
+  async listActiveSessions(userId: string, now: Date): Promise<Session[]> {
+    const { rows } = await this.db.query<SessionRow>(
+      `SELECT ${SESSION_COLUMNS} FROM sessions s
+        WHERE s.user_id = $1 AND s.revoked_at IS NULL AND s.expires_at > $2
+        ORDER BY s.last_used_at DESC, s.created_at DESC`,
+      [userId, now],
+    );
+    return rows.map(toSession);
+  }
+
+  async touchSession(tokenHash: string, now: Date): Promise<void> {
+    await this.db.query('UPDATE sessions SET last_used_at = $2 WHERE token_hash = $1', [tokenHash, now]);
+  }
+
+  async revokeSessionById(userId: string, sessionId: string, now: Date): Promise<boolean> {
+    // user_id in the WHERE clause is the authorization check: you can only revoke your own.
+    const result = await this.db.query(
+      `UPDATE sessions SET revoked_at = $3
+        WHERE id = $2 AND user_id = $1 AND revoked_at IS NULL AND expires_at > $3`,
+      [userId, sessionId, now],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   async revokeSession(tokenHash: string, now: Date): Promise<void> {

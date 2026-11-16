@@ -12,12 +12,15 @@ export type User = {
 export type UserWithSecret = User & { passwordHash: string };
 
 export type Session = {
-  /** SHA-256 of the bearer token. The raw token is never stored. */
+  /** Public identifier, safe to show to the user. */
+  id: string;
+  /** SHA-256 of the bearer token. The raw token is never stored. Never sent to clients. */
   tokenHash: string;
   userId: string;
   createdAt: Date;
   expiresAt: Date;
   revokedAt: Date | null;
+  lastUsedAt: Date;
   userAgent: string | null;
   ip: string | null;
 };
@@ -38,6 +41,7 @@ export type AuditAction =
   | 'session.login_failed'
   | 'session.revoked'
   | 'session.revoked_all'
+  | 'session.revoked_device'
   | 'user.role_changed'
   | 'password.reset_requested'
   | 'password.reset_completed';
@@ -45,7 +49,8 @@ export type AuditAction =
 export type NewPasswordReset = { tokenHash: string; userId: string; expiresAt: Date; ip: string | null };
 
 export type NewUser = { email: string; displayName: string; passwordHash: string; role: Role };
-export type NewSession = Omit<Session, 'createdAt' | 'revokedAt'>;
+/** `createdAt` comes from the service's clock and also seeds `lastUsedAt`. */
+export type NewSession = Omit<Session, 'id' | 'revokedAt' | 'lastUsedAt'>;
 export type NewAuditEntry = Omit<AuditEntry, 'id' | 'createdAt'>;
 
 /**
@@ -65,6 +70,11 @@ export interface AuthStore {
   /** Returns the session and its user only if it is neither revoked nor expired at `now`. */
   findActiveSession(tokenHash: string, now: Date): Promise<{ session: Session; user: User } | null>;
   revokeSession(tokenHash: string, now: Date): Promise<void>;
+  /** Revokes one of `userId`'s own active sessions. False if no such session belongs to them. */
+  revokeSessionById(userId: string, sessionId: string, now: Date): Promise<boolean>;
+  touchSession(tokenHash: string, now: Date): Promise<void>;
+  /** Unrevoked, unexpired sessions for the user, most recently used first. */
+  listActiveSessions(userId: string, now: Date): Promise<Session[]>;
   revokeAllSessions(userId: string, now: Date): Promise<number>;
 
   createPasswordReset(reset: NewPasswordReset): Promise<void>;

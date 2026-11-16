@@ -29,6 +29,20 @@ export const resetConfirmSchema = z.object({
 });
 
 export type RequestContext = { ip: string | null; userAgent: string | null };
+
+/** What a user sees about one of their sessions. Never includes the token or its hash. */
+export type DeviceSession = {
+  id: string;
+  userAgent: string | null;
+  ip: string | null;
+  createdAt: Date;
+  lastUsedAt: Date;
+  expiresAt: Date;
+  current: boolean;
+};
+
+/** "Last used" is written at most this often, so authentication rarely writes. */
+export const TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 export type IssuedSession = { user: User; token: string; expiresAt: Date };
 
 export type AuthServiceOptions = {
@@ -130,9 +144,19 @@ export class AuthService {
 
   /** Sessions read the user's role live on every request, so role changes apply immediately. */
   async authenticate(token: string | undefined): Promise<User | null> {
+    return (await this.resolveSession(token))?.user ?? null;
+  }
+
+  /** The user and the id of the session a token belongs to, or null. */
+  async resolveSession(token: string | undefined): Promise<{ user: User; sessionId: string } | null> {
     if (!token) return null;
-    const found = await this.store.findActiveSession(hashToken(token), this.now());
-    return found?.user ?? null;
+    const now = this.now();
+    const found = await this.store.findActiveSession(hashToken(token), now);
+    if (!found) return null;
+    if (now.getTime() - found.session.lastUsedAt.getTime() >= TOUCH_INTERVAL_MS) {
+      await this.store.touchSession(found.session.tokenHash, now);
+    }
+    return { user: found.user, sessionId: found.session.id };
   }
 
   async logout(token: string | undefined, actor: User, ctx: RequestContext): Promise<void> {
@@ -145,6 +169,26 @@ export class AuthService {
     const count = await this.store.revokeAllSessions(actor.id, this.now());
     await this.store.recordAudit({ actorId: actor.id, action: 'session.revoked_all', targetId: actor.id, ip: ctx.ip, metadata: { count } });
     return count;
+  }
+
+  async listDevices(actor: User, currentSessionId: string | null): Promise<DeviceSession[]> {
+    const sessions = await this.store.listActiveSessions(actor.id, this.now());
+    return sessions.map((s) => ({
+      id: s.id,
+      userAgent: s.userAgent,
+      ip: s.ip,
+      createdAt: s.createdAt,
+      lastUsedAt: s.lastUsedAt,
+      expiresAt: s.expiresAt,
+      current: s.id === currentSessionId,
+    }));
+  }
+
+  /** Signs out one of the actor's own devices. Someone else's session id is a 404, not a 403. */
+  async revokeDevice(actor: User, sessionId: string, ctx: RequestContext): Promise<void> {
+    const revoked = await this.store.revokeSessionById(actor.id, sessionId, this.now());
+    if (!revoked) throw errors.notFound('Session');
+    await this.store.recordAudit({ actorId: actor.id, action: 'session.revoked_device', targetId: actor.id, ip: ctx.ip, metadata: { sessionId } });
   }
 
   async changeRole(actor: User, targetId: string, input: unknown, ctx: RequestContext): Promise<User> {
@@ -238,8 +282,9 @@ export class AuthService {
 
   private async issueSession(user: User, ctx: RequestContext): Promise<IssuedSession> {
     const token = generateSessionToken();
-    const expiresAt = new Date(this.now().getTime() + this.ttl);
-    await this.store.createSession({ tokenHash: hashToken(token), userId: user.id, expiresAt, ip: ctx.ip, userAgent: ctx.userAgent });
+    const createdAt = this.now();
+    const expiresAt = new Date(createdAt.getTime() + this.ttl);
+    await this.store.createSession({ tokenHash: hashToken(token), userId: user.id, createdAt, expiresAt, ip: ctx.ip, userAgent: ctx.userAgent });
     await this.store.recordAudit({ actorId: user.id, action: 'session.created', targetId: user.id, ip: ctx.ip, metadata: {} });
     return { user, token, expiresAt };
   }

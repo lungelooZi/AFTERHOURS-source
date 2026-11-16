@@ -35,14 +35,14 @@ describe.skipIf(!url)('Postgres integration', () => {
   it('migrations are idempotent and recorded', async () => {
     expect(await migrate(pool, () => undefined)).toEqual([]);
     const { rows } = await pool.query('SELECT name FROM schema_migrations');
-    expect(rows.map((r) => r.name)).toEqual(expect.arrayContaining(['0001_identity.sql', '0002_password_resets.sql']));
+    expect(rows.map((r) => r.name)).toEqual(expect.arrayContaining(['0001_identity.sql', '0002_password_resets.sql', '0003_session_ids.sql']));
     expect(await ping(pool)).toBe(true);
   });
 
   it('concurrent migration runs do not collide (advisory lock)', async () => {
     await pool.query('DROP TABLE IF EXISTS password_reset_tokens, audit_log, sessions, users, schema_migrations CASCADE');
     const results = await Promise.all([migrate(pool, () => undefined), migrate(pool, () => undefined)]);
-    expect(results.flat()).toEqual(['0001_identity.sql', '0002_password_resets.sql']);
+    expect(results.flat()).toEqual(['0001_identity.sql', '0002_password_resets.sql', '0003_session_ids.sql']);
   });
 
   it('enforces case-insensitive unique emails at the database level', async () => {
@@ -62,7 +62,7 @@ describe.skipIf(!url)('Postgres integration', () => {
   it('only returns sessions that are unrevoked and unexpired', async () => {
     const user = await store.createUser({ email: 'a@b.co', displayName: 'Ab', passwordHash: 'x', role: 'player' });
     const now = new Date('2026-11-16T10:00:00Z');
-    await store.createSession({ tokenHash: 'a'.repeat(64), userId: user.id, expiresAt: new Date(now.getTime() + 1000), ip: '203.0.113.7', userAgent: 'ua' });
+    await store.createSession({ createdAt: new Date(), tokenHash: 'a'.repeat(64), userId: user.id, expiresAt: new Date(now.getTime() + 1000), ip: '203.0.113.7', userAgent: 'ua' });
     const found = await store.findActiveSession('a'.repeat(64), now);
     expect(found?.user.id).toBe(user.id);
     expect(found?.session.ip).toBe('203.0.113.7');
@@ -73,7 +73,7 @@ describe.skipIf(!url)('Postgres integration', () => {
 
   it('deleting a user cascades to sessions and keeps audit rows', async () => {
     const user = await store.createUser({ email: 'gone@b.co', displayName: 'Gone', passwordHash: 'x', role: 'player' });
-    await store.createSession({ tokenHash: 'b'.repeat(64), userId: user.id, expiresAt: new Date(Date.now() + 60_000), ip: null, userAgent: null });
+    await store.createSession({ createdAt: new Date(), tokenHash: 'b'.repeat(64), userId: user.id, expiresAt: new Date(Date.now() + 60_000), ip: null, userAgent: null });
     await store.recordAudit({ actorId: user.id, action: 'user.registered', targetId: user.id, ip: null, metadata: { k: 1 } });
     await pool.query('DELETE FROM users WHERE id = $1', [user.id]);
     expect((await pool.query('SELECT count(*)::int AS n FROM sessions')).rows[0].n).toBe(0);
@@ -106,7 +106,7 @@ describe.skipIf(!url)('Postgres integration', () => {
       const expiresAt = new Date(Date.now() + 60_000);
       await store.createPasswordReset({ tokenHash: hashToken('token-one'), userId: user.id, expiresAt, ip: '203.0.113.7' });
       await store.createPasswordReset({ tokenHash: hashToken('token-two'), userId: user.id, expiresAt, ip: null });
-      await store.createSession({ tokenHash: 'c'.repeat(64), userId: user.id, expiresAt, ip: null, userAgent: null });
+      await store.createSession({ createdAt: new Date(), tokenHash: 'c'.repeat(64), userId: user.id, expiresAt, ip: null, userAgent: null });
       return user;
     };
 
@@ -129,6 +129,29 @@ describe.skipIf(!url)('Postgres integration', () => {
     it('expired tokens are rejected', async () => {
       await setup();
       expect(await store.completePasswordReset(hashToken('token-one'), 'x', new Date(Date.now() + 120_000))).toBeNull();
+    });
+  });
+
+  describe('devices', () => {
+    it('lists, touches and revokes by id, scoped to the owner', async () => {
+      const a = await store.createUser({ email: 'a@d.co', displayName: 'Ad', passwordHash: 'x', role: 'player' });
+      const b = await store.createUser({ email: 'b@d.co', displayName: 'Bd', passwordHash: 'x', role: 'player' });
+      const later = new Date(Date.now() + 3_600_000);
+      await store.createSession({ createdAt: new Date(), tokenHash: 'd'.repeat(64), userId: a.id, expiresAt: later, ip: '203.0.113.5', userAgent: 'A1' });
+      await store.createSession({ createdAt: new Date(), tokenHash: 'e'.repeat(64), userId: a.id, expiresAt: later, ip: null, userAgent: 'A2' });
+      await store.createSession({ createdAt: new Date(), tokenHash: 'f'.repeat(64), userId: b.id, expiresAt: later, ip: null, userAgent: 'B1' });
+
+      await store.touchSession('e'.repeat(64), new Date(Date.now() + 60_000));
+      const sessions = await store.listActiveSessions(a.id, new Date());
+      expect(sessions.map((s) => s.userAgent)).toEqual(['A2', 'A1']);
+      expect(sessions[1]).toMatchObject({ ip: '203.0.113.5' });
+      expect(sessions[0]!.id).toMatch(/^[0-9a-f-]{36}$/);
+
+      const bSession = (await store.listActiveSessions(b.id, new Date()))[0]!;
+      expect(await store.revokeSessionById(a.id, bSession.id, new Date())).toBe(false);
+      expect(await store.revokeSessionById(a.id, sessions[1]!.id, new Date())).toBe(true);
+      expect((await store.listActiveSessions(a.id, new Date())).map((s) => s.userAgent)).toEqual(['A2']);
+      expect(await store.findActiveSession('f'.repeat(64), new Date())).not.toBeNull();
     });
   });
 });
