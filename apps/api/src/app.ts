@@ -14,7 +14,7 @@ export type AppDependencies = {
   store: AuthStore;
   checkDatabase: () => Promise<boolean>;
   secureCookies: boolean;
-  trustProxy?: boolean;
+  trustProxy?: boolean | string;
   logger?: boolean;
 };
 

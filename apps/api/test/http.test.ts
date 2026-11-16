@@ -80,6 +80,20 @@ describe('HTTP: auth flow', () => {
   });
 });
 
+describe('HTTP: client IP behind the web proxy', () => {
+  const lastAuditIp = async (app: Awaited<ReturnType<typeof makeApp>>) => (await app.store.listAudit(1))[0]?.ip;
+
+  it('uses X-Forwarded-For only when the proxy is trusted', async () => {
+    const trusted = await makeApp({ trustProxy: 'loopback' });
+    await trusted.app.inject({ method: 'POST', url: '/auth/register', payload: alice, headers: { 'x-forwarded-for': '203.0.113.9' } });
+    expect(await lastAuditIp(trusted)).toBe('203.0.113.9');
+
+    const untrusted = await makeApp();
+    await untrusted.app.inject({ method: 'POST', url: '/auth/register', payload: alice, headers: { 'x-forwarded-for': '203.0.113.9' } });
+    expect(await lastAuditIp(untrusted)).toBe('127.0.0.1');
+  });
+});
+
 describe('HTTP: admin', () => {
   it('admin routes require authentication, then the admin role', async () => {
     const { app, store } = await makeApp();

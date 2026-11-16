@@ -18,12 +18,14 @@ flowchart LR
   DB[(PostgreSQL<br/>users · sessions · audit_log)]
   W -- HTTP --> WS
   WS -. serves .-> GE
+  WS -- "/api/* proxy" --> API
   API -- SQL --> DB
   API -. will import .-> GE
 ```
 
-The player client still saves progress in the browser. The API currently provides
-identity; the next phases connect the two.
+The browser only talks to the web server. It serves the game and forwards `/api/*` to
+the API, so the session cookie is same-origin (ADR-0007). Case progress is still saved
+in the browser until #5.
 
 ## Layers inside the API
 
