@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": ["apps/api/src/**/*.ts", "apps/api/test/**/*.ts", "apps/api/*.config.ts", "packages/game-engine/src/**/*.ts"]
+}

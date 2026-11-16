@@ -1,0 +1,14 @@
+{
+  "name": "@afterhours/game-engine",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure, framework-free rules for AFTERHOURS cases: evidence gating, deductions, endings and save validation.",
+  "exports": {
+    "./case": "./src/case.ts",
+    "./investigation": "./src/investigation.ts"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

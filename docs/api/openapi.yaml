@@ -1,0 +1,151 @@
+openapi: 3.1.0
+info:
+  title: AFTERHOURS API
+  version: 0.3.0
+  description: |
+    Identity, sessions and roles for the AFTERHOURS platform.
+    Browsers authenticate with the `ah_session` httpOnly cookie; other clients may send
+    `Authorization: Bearer <token>`. All request bodies are JSON.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:4000
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      summary: Liveness
+      security: []
+      responses:
+        '200': { description: Process is up, content: { application/json: { schema: { type: object, properties: { status: { const: ok }, version: { type: string } } } } } }
+  /ready:
+    get:
+      summary: Readiness (database reachable)
+      security: []
+      responses:
+        '200': { description: Ready }
+        '503': { description: A dependency is unavailable }
+  /auth/register:
+    post:
+      summary: Create a player account and start a session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, displayName]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                password: { type: string, minLength: 12, maxLength: 128 }
+                displayName: { type: string, minLength: 2, maxLength: 40 }
+      responses:
+        '201': { $ref: '#/components/responses/SessionIssued' }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /auth/login:
+    post:
+      summary: Sign in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/SessionIssued' }
+        '401': { $ref: '#/components/responses/Error' }
+        '429':
+          description: Too many failed attempts
+          headers:
+            Retry-After: { schema: { type: integer }, description: Seconds to wait }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  /auth/logout:
+    post:
+      summary: Revoke the current session
+      responses:
+        '204': { description: Signed out }
+        '401': { $ref: '#/components/responses/Error' }
+  /auth/logout-all:
+    post:
+      summary: Revoke every session for the current user
+      responses:
+        '204': { description: Signed out everywhere }
+        '401': { $ref: '#/components/responses/Error' }
+  /auth/me:
+    get:
+      summary: The current user
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { user: { $ref: '#/components/schemas/User' } } } } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /admin/users/{id}/role:
+    patch:
+      summary: Change a user's role (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [role], properties: { role: { $ref: '#/components/schemas/Role' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { type: object, properties: { user: { $ref: '#/components/schemas/User' } } } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /admin/audit:
+    get:
+      summary: Recent audit log entries (admin only)
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    cookieAuth: { type: apiKey, in: cookie, name: ah_session }
+    bearerAuth: { type: http, scheme: bearer }
+  schemas:
+    Role: { type: string, enum: [player, creator, admin] }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        createdAt: { type: string, format: date-time }
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [validation_failed, unauthenticated, invalid_credentials, forbidden, not_found, email_taken, rate_limited] }
+            message: { type: string }
+            details: {}
+  responses:
+    SessionIssued:
+      description: Session created; also sets the `ah_session` cookie
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              user: { $ref: '#/components/schemas/User' }
+              expiresAt: { type: string, format: date-time }
+    Error:
+      description: Error
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

@@ -1,1 +1,27 @@
-{"name":"afterhours","version":"0.2.0","private":true,"type":"module","scripts":{"start":"node server.mjs","test":"node --test tests/*.test.mjs"},"engines":{"node":">=24"}}
+{
+  "name": "afterhours",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "AFTERHOURS: a multiplayer mystery-game platform. Investigate cases, run live case nights, and build your own mysteries.",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "npm run start -w @afterhours/web",
+    "dev:api": "npm run dev -w @afterhours/api",
+    "db:migrate": "npm run migrate -w @afterhours/api",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run test --workspaces --if-present",
+    "test:integration": "npm run test:integration -w @afterhours/api"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
