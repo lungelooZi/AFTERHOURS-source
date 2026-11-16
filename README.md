@@ -15,7 +15,7 @@ Original project by Lungelo Zikalala. All people, places and records in the case
 |------|------------|--------|
 | [`apps/web`](apps/web) | The player client: Case 001 in a desktop-style interface, plus accounts; forwards `/api/*` to the API | Playable |
 | [`packages/game-engine`](packages/game-engine) | Pure case rules: evidence gating, deductions, timeline, endings, save validation | Tested |
-| [`apps/api`](apps/api) | Platform API: accounts, sessions, roles, audit log | Phase 2 in progress |
+| [`apps/api`](apps/api) | Platform API: accounts, sessions and devices, password reset, roles, audit log | Phase 2 complete |
 | [`docs/`](docs) | [Architecture](docs/architecture/overview.md), [decisions](docs/decisions), [OpenAPI](docs/api/openapi.yaml) | |
 
 ## Quick start
@@ -105,8 +105,8 @@ CI runs all three on every push and pull request.
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) and the [open issues](https://github.com/lungelooZi/AFTERHOURS-source/issues).
-Next up: a devices page (#4), then moving case progress and rule enforcement to the
-server (#5).
+Next up: moving case progress and rule enforcement to the server, so puzzle answers
+stop shipping to the browser (#5).
 
 ## Known limitations
 
@@ -121,6 +121,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under the [MIT License](LICENSE
 
 ## Changelog
 
+- **v0.4** - Phase 2 complete. Sign-in and sign-up in the game through a same-origin
+  `/api` proxy (#2); password reset with single-use hashed tokens (#3); see and sign out
+  individual devices (#4). ADR-0007 and ADR-0008.
 - **v0.3** - Monorepo; game rules extracted to `packages/game-engine`; new platform API
   with accounts, sessions, roles, rate limiting and audit log; Postgres migrations;
   CI with integration tests; architecture docs, ADRs and OpenAPI spec; MIT license.

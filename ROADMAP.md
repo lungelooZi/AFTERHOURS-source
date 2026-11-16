@@ -11,7 +11,7 @@ creating mysteries. Each phase ships something usable and keeps the game working
 - CI: typecheck, unit tests, integration tests against a Postgres service container
 - MIT license, contributing guide, architecture overview, ADRs, OpenAPI spec
 
-## Phase 2: Identity 🚧 (v0.3 → v0.4)
+## Phase 2: Identity ✅ (v0.4)
 
 - [x] Registration and sign-in with scrypt-hashed passwords
 - [x] Opaque, hashed, revocable sessions (cookie + Bearer)
@@ -20,7 +20,7 @@ creating mysteries. Each phase ships something usable and keeps the game working
 - [x] Audit log of security events
 - [x] Sign-in / sign-up screens in the web client, served same-origin through an `/api` proxy (#2)
 - [x] Password reset by email: single-use, expiring, hashed tokens; development emails print to the terminal (#3)
-- [ ] List and revoke individual sessions ("devices") from account settings (#4)
+- [x] See and sign out individual devices from the Account window (#4)
 
 ## Phase 3: Cases on the server (v0.5)
 

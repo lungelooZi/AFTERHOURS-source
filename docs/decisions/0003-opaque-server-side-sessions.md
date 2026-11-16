@@ -25,3 +25,12 @@ We need sign-out that takes effect immediately, "sign out everywhere", and role 
 - CSRF: `SameSite=Lax` blocks cross-site POSTs carrying the cookie, and the API only
   accepts `application/json` bodies (form posts get `415`). We will add a CSRF token if we
   ever need cross-site embedding.
+
+## Update (v0.4, #4)
+
+Sessions now also have a random public `id` and a `last_used_at` time, so players can
+see and sign out individual devices (`GET /auth/sessions`, `DELETE /auth/sessions/:id`)
+without the token hash ever leaving the server. `last_used_at` is written at most every
+5 minutes per session, so authenticated reads stay read-only almost all of the time.
+Revocation by id includes `user_id` in the `WHERE` clause; another user's session id
+returns `404` rather than `403`, so ids can't be probed.
