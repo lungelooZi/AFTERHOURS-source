@@ -1,5 +1,6 @@
 import {freshJournal,restoreJournal,ready} from '/investigation.js';
 import {renderJournal} from '/journal-ui.js';
+import {renderAccount,refreshIdentity} from '/account-ui.js';
 import {evidence,fresh,restore,discover,unlock,decide} from '/case.js';
 let state = fresh();
 let storageOK=true;
@@ -19,6 +20,7 @@ function open(app: string){
  function text(value: string,tag='p'){const p=document.createElement(tag);p.textContent=value;body.append(p);return p;}
  function trace(id: string){const e=evidence.find(e=>e.id===id)!;state=discover(state,id);save();const box=document.createElement('article');box.className='trace';const h=document.createElement('h3');h.textContent=e.title;box.append(h);const p=document.createElement('p');p.textContent=e.text;box.append(p);body.append(box);button(state.pinned.includes(id)?'Unpin evidence':'Pin to evidence board',()=>{state={...state,pinned:state.pinned.includes(id)?state.pinned.filter(x=>x!==id):[...state.pinned,id]};save();open(app);});}
  renderJournal(app,body,state,journal,(next,refresh)=>{journal=next;save();if(refresh)open(app);});
+ renderAccount(app,body,()=>open(app));
  if(app==='messages'){text('Someone was here after midnight.','h2');trace('message');trace('boat');}
  if(app==='files'){text('Recovered from the desktop','h2');trace('draft');trace('inspection');}
  if(app==='archive'){
@@ -39,4 +41,4 @@ function open(app: string){
 document.querySelectorAll<HTMLButtonElement>('[data-app]').forEach(b=>b.onclick=()=>open(b.dataset.app!));
 document.querySelector<HTMLButtonElement>('#reset')!.onclick=()=>{if(confirm('Erase this case’s progress and start again?')){state=fresh();journal=freshJournal();save();document.querySelector('.window')?.remove();}};
 save();
-
+refreshIdentity();
