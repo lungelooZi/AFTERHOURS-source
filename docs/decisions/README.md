@@ -13,3 +13,4 @@ the decision, and the consequences we accepted.
 | [0006](0006-fastify-over-nestjs.md) | Fastify with plain modules instead of NestJS | Accepted |
 | [0007](0007-same-origin-api-proxy.md) | Serve the API through the web server (same origin) | Accepted |
 | [0008](0008-password-reset-tokens.md) | Password reset with single-use, hashed tokens | Accepted |
+| [0009](0009-run-cases-on-the-server.md) | Run cases on the server; the browser gets a redacted view | Accepted |

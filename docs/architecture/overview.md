@@ -3,7 +3,7 @@
 AFTERHOURS is a mystery-game platform. Players investigate cases alone or together,
 communities gather for scheduled live "case nights", and creators publish their own cases.
 
-## Current system (v0.4)
+## Current system (v0.5)
 
 ```mermaid
 flowchart LR
@@ -17,15 +17,25 @@ flowchart LR
   GE[(packages/game-engine<br/>pure rules)]
   DB[(PostgreSQL<br/>users · sessions · audit_log)]
   W -- HTTP --> WS
-  WS -. serves .-> GE
   WS -- "/api/* proxy" --> API
   API -- SQL --> DB
-  API -. will import .-> GE
+  API -- "apply + toPlayerView" --> GE
 ```
 
 The browser only talks to the web server. It serves the game and forwards `/api/*` to
-the API, so the session cookie is same-origin (ADR-0007). Case progress is still saved
-in the browser until #5.
+the API, so cookies are same-origin (ADR-0007). The game engine runs only inside the
+API: the browser sends moves (`POST /cases/case-001/actions`) and renders the redacted
+`PlayerView` it gets back (ADR-0009).
+
+### A move, end to end
+
+1. Player clicks **Decrypt** → `POST /api/cases/case-001/actions {"type":"unlock","password":"…"}`.
+2. The API finds the caller's run (account, or guest cookie), checks the guess limit, and
+   runs `apply(run, case001, action)`.
+3. If the run changed, it saves with `WHERE version = <read version>`; on a clash it
+   re-reads and re-applies.
+4. It answers `{ view: toPlayerView(run), outcome }`. The ledger's text appears in the
+   view only now that it has been unlocked.
 
 ## Layers inside the API
 
@@ -56,6 +66,7 @@ milliseconds with an in-memory store and a fake clock, while
 erDiagram
   users ||--o{ sessions : has
   users ||--o{ password_reset_tokens : requests
+  users ||--o{ case_runs : plays
   users ||--o{ audit_log : "acts in"
   users {
     uuid id PK
@@ -72,6 +83,13 @@ erDiagram
     timestamptz expires_at
     timestamptz revoked_at
     inet ip
+  }
+  case_runs {
+    uuid id PK
+    text case_id
+    uuid user_id FK "or guest_token_hash"
+    jsonb state
+    int version "optimistic lock"
   }
   password_reset_tokens {
     char64 token_hash PK

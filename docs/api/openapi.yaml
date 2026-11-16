@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AFTERHOURS API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Identity, sessions and roles for the AFTERHOURS platform.
     Browsers authenticate with the `ah_session` httpOnly cookie; other clients may send
@@ -142,6 +142,58 @@ paths:
         '204': { description: Signed out }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+  /cases/{caseId}:
+    get:
+      summary: The caller's view of a case (creates a guest run and the ah_guest cookie on first visit)
+      security: []
+      parameters: [{ $ref: '#/components/parameters/CaseId' }]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { view: { $ref: '#/components/schemas/PlayerView' } } } } } }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /cases/{caseId}/actions:
+    post:
+      summary: Make a move
+      description: A refused move (e.g. wrong password) is still 200, with outcome.accepted = false.
+      security: []
+      parameters: [{ $ref: '#/components/parameters/CaseId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - { type: object, required: [type, app], properties: { type: { const: open }, app: { enum: [messages, files, archive] } } }
+                - { type: object, required: [type, password], properties: { type: { const: unlock }, password: { type: string } } }
+                - { type: object, required: [type, evidenceId], properties: { type: { enum: [pin, unpin] }, evidenceId: { type: string } } }
+                - { type: object, required: [type, deductionId, answer, supporting], properties: { type: { const: deduce }, deductionId: { type: string }, answer: { type: string }, supporting: { type: array, items: { type: string } } } }
+                - { type: object, required: [type], properties: { type: { const: hint } } }
+                - { type: object, required: [type, text], properties: { type: { const: notes }, text: { type: string } } }
+                - { type: object, required: [type, channel], properties: { type: { const: decide }, channel: { type: string } } }
+      responses:
+        '200':
+          description: The new view and whether the move was accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  view: { $ref: '#/components/schemas/PlayerView' }
+                  outcome:
+                    type: object
+                    properties:
+                      accepted: { type: boolean }
+                      reason: { enum: [wrong_password, not_established, not_found_yet, not_ready, case_closed, no_more_hints, unknown] }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { description: Changed in another window too many times; retry, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { description: Too many wrong archive passwords, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /cases/{caseId}/restart:
+    post:
+      summary: Start the case again
+      security: []
+      parameters: [{ $ref: '#/components/parameters/CaseId' }]
+      responses:
+        '200': { description: The fresh view }
   /admin/users/{id}/role:
     patch:
       summary: Change a user's role (admin only)
@@ -168,6 +220,8 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
 components:
+  parameters:
+    CaseId: { name: caseId, in: path, required: true, schema: { type: string, examples: [case-001] } }
   securitySchemes:
     cookieAuth: { type: apiKey, in: cookie, name: ah_session }
     bearerAuth: { type: http, scheme: bearer }
@@ -181,6 +235,22 @@ components:
         displayName: { type: string }
         role: { $ref: '#/components/schemas/Role' }
         createdAt: { type: string, format: date-time }
+    PlayerView:
+      type: object
+      description: Only what the player has earned. Unsolved deductions have options but no answer; evidence appears once found.
+      properties:
+        caseId: { type: string }
+        title: { type: string }
+        progress: { type: object }
+        apps: { type: object, description: Found evidence per desktop app }
+        archive: { type: object, properties: { unlocked: { type: boolean } } }
+        pinned: { type: array, items: { type: object } }
+        deductions: { type: array, items: { type: object } }
+        timeline: { type: array, items: { type: object } }
+        hints: { type: object, properties: { revealed: { type: array, items: { type: string } }, remaining: { type: integer } } }
+        notes: { type: string }
+        resolve: { type: object }
+        ending: { type: [object, 'null'] }
     DeviceSession:
       type: object
       properties:
@@ -198,7 +268,7 @@ components:
           type: object
           required: [code, message]
           properties:
-            code: { type: string, examples: [validation_failed, unauthenticated, invalid_credentials, invalid_reset_token, forbidden, not_found, email_taken, rate_limited] }
+            code: { type: string, examples: [validation_failed, conflict, unauthenticated, invalid_credentials, invalid_reset_token, forbidden, not_found, email_taken, rate_limited] }
             message: { type: string }
             details: {}
   responses:

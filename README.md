@@ -13,9 +13,9 @@ Original project by Lungelo Zikalala. All people, places and records in the case
 
 | Path | What it is | Status |
 |------|------------|--------|
-| [`apps/web`](apps/web) | The player client: Case 001 in a desktop-style interface, plus accounts; forwards `/api/*` to the API | Playable |
-| [`packages/game-engine`](packages/game-engine) | Pure case rules: evidence gating, deductions, timeline, endings, save validation | Tested |
-| [`apps/api`](apps/api) | Platform API: accounts, sessions and devices, password reset, roles, audit log | Phase 2 complete |
+| [`apps/web`](apps/web) | The player client: renders the case and sends moves; holds no answers. Forwards `/api/*` to the API | Playable |
+| [`packages/game-engine`](packages/game-engine) | Server-only case rules: a pure reducer and a redacted player view | Tested |
+| [`apps/api`](apps/api) | Platform API: cases (players and guests), accounts, sessions and devices, password reset, roles, audit log | Phase 3 |
 | [`docs/`](docs) | [Architecture](docs/architecture/overview.md), [decisions](docs/decisions), [OpenAPI](docs/api/openapi.yaml) | |
 
 ## Quick start
@@ -28,28 +28,30 @@ cd AFTERHOURS-source
 npm install
 ~~~
 
-### Play Case 001
+### Play Case 001 (no database needed)
 
 ~~~
-npm start
+npm run dev:memory
 ~~~
 
-Open http://localhost:3000. To use another port: `PORT=3001 npm start`
-(PowerShell: `$env:PORT=3001; npm start`).
+Open http://localhost:3000. This starts the API without a database and the game server
+together; everything is forgotten when you press Ctrl+C. The browser never receives the
+answers: every move is checked by the API ([ADR-0009](docs/decisions/0009-run-cases-on-the-server.md)).
 
-### Run the API
+### Run with Postgres (progress and accounts are kept)
 
 ~~~
 docker compose up -d db
 cp .env.example apps/api/.env        # PowerShell: Copy-Item .env.example apps/api/.env
-npm run dev:api
+npm run dev
 ~~~
 
-The API listens on http://localhost:4000 and applies database migrations on start.
-With both running (`npm start` in one terminal, `npm run dev:api` in another), open
-http://localhost:3000 and use the **Account** app to create an account. The game server
-forwards `/api/*` to the API ([ADR-0007](docs/decisions/0007-same-origin-api-proxy.md));
-set `API_URL` if the API runs elsewhere.
+`npm run dev` starts the API (http://localhost:4000, migrations run on start) and the
+game server (http://localhost:3000) together. Play as a guest, or use the **Account** app:
+guest progress moves into your account when you sign up. The game server forwards
+`/api/*` to the API ([ADR-0007](docs/decisions/0007-same-origin-api-proxy.md)); set
+`API_URL` if the API runs elsewhere. You can also run them separately with
+`npm run dev:api` and `npm start`.
 
 **Forgot your password?** In development no email is sent: the reset email, with its
 link, is printed in the terminal running the API. Open the link to choose a new password.
@@ -69,7 +71,7 @@ Make yourself an admin: `npm run promote -w @afterhours/api -- you@example.com a
 
 ~~~
 npm run typecheck          # strict TypeScript across api and game-engine
-npm test                   # game-engine, web server + account client (node:test), API (Vitest)
+npm test                   # game-engine, web server + clients + spoiler check (node:test), API (Vitest)
 npm run test:integration   # API against real Postgres
 ~~~
 
@@ -79,9 +81,15 @@ CI runs all three on every push and pull request.
 
 ## Engineering highlights
 
-- **Rules separate from interfaces.** The game's rules are pure functions shared by the
-  client and (next) the server; the API's rules are services that don't know about HTTP
-  or SQL. Both are tested directly.
+- **No answers in the browser.** The game runs on the server as a pure reducer; players get
+  a redacted view that reveals each answer only once it is earned. A crawler test fails if
+  any answer appears in what the page downloads
+  ([ADR-0009](docs/decisions/0009-run-cases-on-the-server.md)).
+- **Guests and accounts, one model.** Every player has a server-side run; guest progress
+  moves into the account on sign-up. Saves use optimistic locking, so two tabs can't
+  overwrite each other.
+- **Rules separate from interfaces.** Game rules and API services know nothing about HTTP
+  or SQL, and are tested directly.
 - **Sessions you can actually revoke.** Opaque random tokens, stored only as SHA-256
   hashes, in httpOnly cookies; sign-out and role changes apply instantly
   ([ADR-0003](docs/decisions/0003-opaque-server-side-sessions.md)).
@@ -105,15 +113,13 @@ CI runs all three on every push and pull request.
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) and the [open issues](https://github.com/lungelooZi/AFTERHOURS-source/issues).
-Next up: moving case progress and rule enforcement to the server, so puzzle answers
-stop shipping to the browser (#5).
+Next up: Phase 4, playing together: multiplayer case rooms over WebSockets.
 
 ## Known limitations
 
-- Case progress is still saved only in the browser, and puzzle answers ship to the client
-  (fixed in Phase 3).
-- Login rate limits are per process; multiple API instances need Redis (ADR-0005).
-- No browser (Playwright) tests yet.
+- Login and guess rate limits are per process; multiple API instances need Redis (ADR-0005).
+- Guest runs are never cleaned up yet (needs the Phase 4 job queue).
+- No browser (Playwright) tests in CI yet.
 
 ## Contributing
 
@@ -121,6 +127,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under the [MIT License](LICENSE
 
 ## Changelog
 
+- **v0.5** - Cases run on the server (#5): the browser no longer receives any answers.
+  Progress is saved per account or per guest, moves into your account when you sign up,
+  and is protected by optimistic locking; wrong archive passwords are rate limited.
+  `npm run dev` / `npm run dev:memory` start everything with one command, the second
+  without a database. Old browser-saved progress is reset. ADR-0009.
 - **v0.4** - Phase 2 complete. Sign-in and sign-up in the game through a same-origin
   `/api` proxy (#2); password reset with single-use hashed tokens (#3); see and sign out
   individual devices (#4). ADR-0007 and ADR-0008.
