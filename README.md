@@ -1,78 +1,113 @@
 # AFTERHOURS
 
-A browser mystery game set inside a missing person's laptop. Read her messages, recover files, crack an encrypted archive, prove your deductions - then make one call you cannot take back.
+[![CI](https://github.com/lungelooZi/AFTERHOURS-source/actions/workflows/ci.yml/badge.svg)](https://github.com/lungelooZi/AFTERHOURS-source/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Original project by Lungelo Zikalala. All people, places and records are fictional.
+A mystery-game platform. It starts with **Case 001: The Missing Hour**, a browser mystery
+set inside a missing person's laptop, and is growing into a place to investigate cases
+together, host live case nights for your community, and publish your own mysteries.
 
-## Play it locally
+Original project by Lungelo Zikalala. All people, places and records in the cases are fictional.
 
-Requires Node.js 24 or later. There are no packages to install and no build step.
+## What's in the repo
+
+| Path | What it is | Status |
+|------|------------|--------|
+| [`apps/web`](apps/web) | The player client: Case 001, nine desktop apps in a window interface | Playable |
+| [`packages/game-engine`](packages/game-engine) | Pure case rules: evidence gating, deductions, timeline, endings, save validation | Tested |
+| [`apps/api`](apps/api) | Platform API: accounts, sessions, roles, audit log | Phase 2 in progress |
+| [`docs/`](docs) | [Architecture](docs/architecture/overview.md), [decisions](docs/decisions), [OpenAPI](docs/api/openapi.yaml) | |
+
+## Quick start
+
+Requires **Node.js 24** (Node 22.18+ also works) and, for the API, **Docker**.
 
 ~~~
 git clone https://github.com/lungelooZi/AFTERHOURS-source.git
 cd AFTERHOURS-source
-node server.mjs
+npm install
 ~~~
 
-Then open http://localhost:3000. If port 3000 is busy, pick another one:
+### Play Case 001
 
-- Windows PowerShell: `$env:PORT=3001; node server.mjs`
-- macOS / Linux: `PORT=3001 node server.mjs`
+~~~
+npm start
+~~~
 
-## How to play
+Open http://localhost:3000. To use another port: `PORT=3001 npm start`
+(PowerShell: `$env:PORT=3001; npm start`).
 
-You have Maya's laptop. She left it behind the night she disappeared.
+### Run the API
 
-1. Open **Messages** and **Files** to recover traces.
-2. Unlock the **Archive** - the password is hidden in what you recover.
-3. Pin documents to the **Evidence board** and watch the **Timeline** fill in.
-4. Prove three conclusions in **Deductions** by choosing the right answer *and* the documents that support it.
-5. **Make contact** - choose who receives Maya's location. There are two endings.
+~~~
+docker compose up -d db
+cp .env.example apps/api/.env        # PowerShell: Copy-Item .env.example apps/api/.env
+npm run dev:api
+~~~
 
-The **Notebook** keeps your theories and **Hints** gives progressively stronger nudges. Progress saves in your browser; **Restart case** clears it.
+The API listens on http://localhost:4000 and applies database migrations on start.
+Try it:
 
-## Features (v0.2)
+~~~
+curl -c jar.txt -H "content-type: application/json" \
+  -d '{"email":"you@example.com","password":"a long passphrase","displayName":"You"}' \
+  http://localhost:4000/auth/register
+curl -b jar.txt http://localhost:4000/auth/me
+~~~
 
-- Nine desktop apps in a draggable window interface
-- Evidence gating: locked documents cannot be read before they are unlocked
-- Deductions checked against both the answer and the supporting evidence
-- A timeline that only reveals events once their source document is found
-- Validated local saves: corrupted or tampered save data recovers safely
-- Game rules enforced in pure, tested logic - not only in the interface
-
-## How it is built
-
-- `src/case.ts` - evidence, progression, save validation and endings (pure logic)
-- `src/investigation.ts` - deductions, timeline, hints and notebook rules (pure logic)
-- `src/app.ts`, `src/journal-ui.ts` - the desktop interface, written with native DOM APIs
-- `server.mjs` - a small Node HTTP server that serves an explicit allowlist of files and strips TypeScript types with Node's built-in support, so the project needs no build step
-- `tests/` - Node's built-in test runner; GitHub Actions runs the tests on every push
-
-Design choices: the prototype has zero dependencies so it runs anywhere Node does, and the game rules are kept separate from the interface so they can be tested directly and later moved to a server.
+Make yourself an admin: `npm run promote -w @afterhours/api -- you@example.com admin`
 
 ## Tests
 
 ~~~
-node --test tests/*.test.mjs
+npm run typecheck          # strict TypeScript across api and game-engine
+npm test                   # game-engine (node:test) + API unit and HTTP tests (Vitest)
+npm run test:integration   # API against real Postgres
 ~~~
 
-8 tests cover evidence gating, the archive password, deductions, the rescue decision and save recovery.
+Integration tests need `DATABASE_URL`, for example
+`postgres://afterhours:afterhours@localhost:5432/afterhours_test` (created by Docker Compose).
+CI runs all three on every push and pull request.
 
-## Known limitations
+## Engineering highlights
 
-- Single-player prototype; progress is saved only in the browser.
-- Puzzle answers ship to the browser - fine for solo play, not for competitive play.
-- The case takes a few minutes; the target is a 15-minute investigation.
-- No automated browser (interface) tests yet.
+- **Rules separate from interfaces.** The game's rules are pure functions shared by the
+  client and (next) the server; the API's rules are services that don't know about HTTP
+  or SQL. Both are tested directly.
+- **Sessions you can actually revoke.** Opaque random tokens, stored only as SHA-256
+  hashes, in httpOnly cookies; sign-out and role changes apply instantly
+  ([ADR-0003](docs/decisions/0003-opaque-server-side-sessions.md)).
+- **Password safety without native deps.** scrypt with self-describing parameters,
+  automatic upgrade on login, and constant-work responses for unknown emails
+  ([ADR-0004](docs/decisions/0004-scrypt-password-hashing.md)).
+- **Brute-force protection.** Sliding-window limits per account+IP and per IP, with
+  `Retry-After` ([ADR-0005](docs/decisions/0005-in-memory-rate-limiting-until-we-scale.md)).
+- **Database as a second line of defence.** Case-insensitive unique emails, role `CHECK`
+  constraints, cascading sessions, append-only audit log, concurrency-safe migrations.
+- **No build step.** TypeScript runs directly on Node's type stripping and is checked by
+  `tsc --noEmit` ([ADR-0002](docs/decisions/0002-typescript-without-a-build-step.md)).
 
 ## Roadmap
 
-1. Expand the story into a timed 15-minute investigation with branching conversations.
-2. Move the interface to React components and add browser interaction tests.
-3. Add Express/PostgreSQL persistence and two-player Socket.IO rooms with private clues.
-4. Add a case editor, an accessibility review and deployment.
+See [ROADMAP.md](ROADMAP.md). Next up: sign-in screens in the client, password reset,
+then moving case progress and rule enforcement to the server.
+
+## Known limitations
+
+- Case progress is still saved only in the browser, and puzzle answers ship to the client
+  (fixed in Phase 3).
+- Login rate limits are per process; multiple API instances need Redis (ADR-0005).
+- No browser (Playwright) tests yet.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under the [MIT License](LICENSE).
 
 ## Changelog
 
-- **v0.2** - Deductions, Timeline, Notebook and Hints; the rescue decisionnow requires verified deductions; tests run in GitHub Actions.
+- **v0.3** - Monorepo; game rules extracted to `packages/game-engine`; new platform API
+  with accounts, sessions, roles, rate limiting and audit log; Postgres migrations;
+  CI with integration tests; architecture docs, ADRs and OpenAPI spec; MIT license.
+- **v0.2** - Deductions, Timeline, Notebook and Hints; the rescue decision now requires
+  verified deductions; tests run in GitHub Actions.
 - **v0.1** - First playable slice: messages, files, encrypted archive, evidence board and two endings.
