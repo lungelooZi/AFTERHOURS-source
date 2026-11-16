@@ -19,7 +19,7 @@ creating mysteries. Each phase ships something usable and keeps the game working
 - [x] Login rate limiting (per account+IP and per IP)
 - [x] Audit log of security events
 - [x] Sign-in / sign-up screens in the web client, served same-origin through an `/api` proxy (#2)
-- [ ] Password reset by email (single-use, expiring tokens) (#3)
+- [x] Password reset by email: single-use, expiring, hashed tokens; development emails print to the terminal (#3)
 - [ ] List and revoke individual sessions ("devices") from account settings (#4)
 
 ## Phase 3: Cases on the server (v0.5)

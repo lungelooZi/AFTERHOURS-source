@@ -69,6 +69,38 @@ paths:
           headers:
             Retry-After: { schema: { type: integer }, description: Seconds to wait }
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  /auth/password-reset:
+    post:
+      summary: Request a password reset email
+      description: Always answers 202 with the same body, whether or not the email has an account.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email], properties: { email: { type: string } } }
+      responses:
+        '202': { description: Accepted, content: { application/json: { schema: { type: object, properties: { message: { type: string } } } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /auth/password-reset/confirm:
+    post:
+      summary: Set a new password using a reset token
+      description: Single use. Signs the user out on every device and clears the session cookie.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '204': { description: Password changed }
+        '400': { description: "validation_failed or invalid_reset_token", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /auth/logout:
     post:
       summary: Revoke the current session
@@ -133,7 +165,7 @@ components:
           type: object
           required: [code, message]
           properties:
-            code: { type: string, examples: [validation_failed, unauthenticated, invalid_credentials, forbidden, not_found, email_taken, rate_limited] }
+            code: { type: string, examples: [validation_failed, unauthenticated, invalid_credentials, invalid_reset_token, forbidden, not_found, email_taken, rate_limited] }
             message: { type: string }
             details: {}
   responses:

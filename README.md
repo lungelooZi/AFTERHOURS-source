@@ -51,6 +51,9 @@ http://localhost:3000 and use the **Account** app to create an account. The game
 forwards `/api/*` to the API ([ADR-0007](docs/decisions/0007-same-origin-api-proxy.md));
 set `API_URL` if the API runs elsewhere.
 
+**Forgot your password?** In development no email is sent: the reset email, with its
+link, is printed in the terminal running the API. Open the link to choose a new password.
+
 Or call the API directly:
 
 ~~~
@@ -85,6 +88,10 @@ CI runs all three on every push and pull request.
 - **Password safety without native deps.** scrypt with self-describing parameters,
   automatic upgrade on login, and constant-work responses for unknown emails
   ([ADR-0004](docs/decisions/0004-scrypt-password-hashing.md)).
+- **Account recovery without enumeration.** Password reset answers the same for every
+  email, uses single-use hashed tokens carried in the URL fragment, and completes in one
+  transaction that also signs out every device
+  ([ADR-0008](docs/decisions/0008-password-reset-tokens.md)).
 - **Brute-force protection.** Sliding-window limits per account+IP and per IP, with
   `Retry-After` ([ADR-0005](docs/decisions/0005-in-memory-rate-limiting-until-we-scale.md)).
 - **Database as a second line of defence.** Case-insensitive unique emails, role `CHECK`
@@ -98,8 +105,8 @@ CI runs all three on every push and pull request.
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) and the [open issues](https://github.com/lungelooZi/AFTERHOURS-source/issues).
-Next up: password reset (#3), a devices page (#4), then moving case progress and rule
-enforcement to the server (#5).
+Next up: a devices page (#4), then moving case progress and rule enforcement to the
+server (#5).
 
 ## Known limitations
 
